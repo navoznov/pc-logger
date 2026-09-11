@@ -1,0 +1,7 @@
+{
+  "name": "pc-logger-dashboard",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/dashboard/"
+  }
+}
