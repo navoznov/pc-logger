@@ -345,6 +345,22 @@ public class GameSpanTests
             Assert.Equal(spans[i - 1].T + spans[i - 1].D, spans[i].T);
     }
 
+    // Every other game-span test ends its window exactly at the run's Ended, so the Started
+    // boundary was never walked past in either direction: widening it by one bucket left the
+    // whole suite green while every game was drawn ten seconds early.
+    [Fact]
+    public void DrawsNoGameBeforeItsRunStarted()
+    {
+        var runs = new[] { new AppRun(1, 1020, 1040) };
+        var buckets = new[] { new Bucket(1000, 5, 0, null), new Bucket(1010, 5, 0, null),
+                              new Bucket(1020, 5, 0, null), new Bucket(1030, 5, 0, null) };
+
+        var spans = SpanBuilder.BuildGameSpans(runs, buckets, Paths, Folders, 1000, 1040);
+
+        Assert.Equal(1020, spans.Single().T);
+        Assert.Equal(20, spans.Single().D);
+    }
+
     // A slot with no bucket row means the recorder was not running, so there is no evidence
     // about anything — including whether the game was up. Claiming otherwise would make the
     // two fact tracks of one payload contradict each other at the same instant: the presence

@@ -200,6 +200,45 @@ public class BuildJsonTests : IDisposable
         Assert.Equal(expected, Build(500_030).GetProperty("tz_offset_minutes").GetInt32());
     }
 
+    // Nothing pinned the history depth, so doubling the constant left the suite green while
+    // every report silently covered 180 days.
+    [Fact]
+    public void RefusesToRenderAScriptTagItCouldNotInline()
+    {
+        // `defer` is enough to miss the pattern; the old behaviour left the tag pointing at a
+        // file that does not exist beside the report and produced a blank dashboard.
+        var template = "<script defer src=\"regime.js\"></script>/*__DATA__*/";
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ReportBuilder.Render(template, "{}", _ => "body"));
+
+        Assert.Contains("not inlined", error.Message);
+    }
+
+    [Fact]
+    public void RefusesToRenderATemplateWithNoDataPlaceholder()
+    {
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ReportBuilder.Render("<p>no placeholder</p>", "{}", _ => "body"));
+
+        Assert.Contains("placeholder", error.Message);
+    }
+
+    [Fact]
+    public void CoversExactlyNinetyDaysByDefault()
+    {
+        using (var db = new Db(_path))
+        {
+            new BucketStore(db).Write(new Bucket(500_000_000, 5, 0, null));
+        }
+
+        var spans = Build(500_000_000).GetProperty("spans").EnumerateArray()
+            .Select(x => x.GetProperty("d").GetInt64()).Sum();
+
+        // the window is [now - 90 days, now rounded up to the next bucket boundary)
+        Assert.Equal(90L * 86_400 + 10, spans);
+    }
+
     [Fact]
     public void CarriesDefaultThresholdsFromTheSpec()
     {

@@ -83,6 +83,15 @@ public sealed class ReportBuilder
                 return $"<script>{body}</script>";
             });
 
+        // The pattern is deliberately narrow, and a tag it does not match would be left in the
+        // output pointing at a file that will not exist beside the report — a silently broken
+        // dashboard. Adding `defer`, single quotes, or an attribute before src is enough to miss.
+        if (Regex.IsMatch(html, @"<script[^>]*\ssrc=", RegexOptions.IgnoreCase))
+            throw new InvalidOperationException("a <script src=...> tag was not inlined");
+
+        if (!html.Contains("/*__DATA__*/"))
+            throw new InvalidOperationException("the template has no /*__DATA__*/ placeholder");
+
         return html.Replace("/*__DATA__*/", json);
     }
 }

@@ -146,17 +146,28 @@ public static class SpanBuilder
         (string Lvl, string App)? run = null;
         var runStart = 0L;
 
+        // Runs arrive sorted by Started, so the grid walk sweeps them with a moving window
+        // instead of rescanning the whole array at every slot. Ninety days is 777 601 slots,
+        // and the old rescan made this function 65 % of the whole report build — growing
+        // linearly with every game the child ever launched.
+        var active = new List<AppRun>();
+        var next = 0;
+
         for (var ts = fromTs; ts < toTs; ts += bucketSeconds)
         {
-            AppRun? covering = null;
-            foreach (var candidate in gameRuns)
+            while (next < gameRuns.Length && gameRuns[next].Started <= ts)
             {
-                if (candidate.Started <= ts && (candidate.Ended is null || candidate.Ended > ts))
-                {
-                    covering = candidate;
-                    break;
-                }
+                active.Add(gameRuns[next]);
+                next++;
             }
+            for (var i = active.Count - 1; i >= 0; i--)
+            {
+                if (active[i].Ended is { } ended && ended <= ts) active.RemoveAt(i);
+            }
+
+            // active keeps the array's order, so this is the same run the old linear scan
+            // would have stopped at: the earliest-started one still covering this slot.
+            AppRun? covering = active.Count > 0 ? active[0] : null;
 
             // A slot with no bucket row means the recorder was not running there, so there is
             // no evidence about anything in it — including whether the game was up. Drawing a
