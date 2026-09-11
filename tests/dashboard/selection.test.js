@@ -27,6 +27,29 @@ test('percentages are taken against the whole selection', () => {
   assert.equal(s.pct.off, 0);
 });
 
+test('percentages are taken against the whole selection, not the spans covered within it', () => {
+  // Only 40 of the 60 selected minutes are covered by spans. If pct divided by
+  // active + away + off instead of the full selection, active would read 75, not 50.
+  const spans = [span(0, 30, 'active'), span(30, 10, 'away')];
+
+  const s = Selection.stats(spans, [], 0, 60 * MIN);
+
+  assert.equal(s.total, 3600);
+  assert.equal(s.pct.active, 50);
+  assert.equal(s.pct.away, 17);
+});
+
+test('gameFg percentage is a share of the whole selection, not of active time', () => {
+  // active only covers half the selection. Dividing gameFg by active instead of the
+  // full selection would read 50, not 25.
+  const spans = [span(0, 30, 'active')];
+  const games = [game(0, 15, 'fg')];
+
+  const s = Selection.stats(spans, games, 0, 60 * MIN);
+
+  assert.equal(s.pct.gameFg, 25);
+});
+
 test('clips spans that straddle the selection edges', () => {
   const spans = [span(0, 60, 'active')];
 
