@@ -220,7 +220,7 @@ CREATE TABLE buckets (
 
 CREATE TABLE apps (
   id   INTEGER PRIMARY KEY,
-  path TEXT UNIQUE NOT NULL       -- полный путь к исполняемому файлу
+  path TEXT UNIQUE NOT NULL COLLATE NOCASE  -- полный путь; Windows-пути регистронезависимы
 );
 
 CREATE TABLE app_runs (
