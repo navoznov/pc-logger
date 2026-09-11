@@ -47,15 +47,26 @@ public sealed class AppStore
         return result;
     }
 
+    /// <summary>
+    /// Opens a run for an app. Runs are keyed by executable path, not by process, so an
+    /// app has at most one open run at a time: the scanner reports a path as started only
+    /// when it was absent from the previous scan. The WHERE NOT EXISTS makes that invariant
+    /// structural, so CloseRun below can never close a second, still-running row.
+    /// </summary>
     public void OpenRun(long appId, long startedTs)
     {
         using var cmd = _db.Connection.CreateCommand();
-        cmd.CommandText = "INSERT INTO app_runs(app_id, started, ended) VALUES ($id, $started, NULL);";
+        cmd.CommandText = """
+            INSERT INTO app_runs(app_id, started, ended)
+            SELECT $id, $started, NULL
+            WHERE NOT EXISTS (SELECT 1 FROM app_runs WHERE app_id = $id AND ended IS NULL);
+            """;
         cmd.Parameters.AddWithValue("$id", appId);
         cmd.Parameters.AddWithValue("$started", startedTs);
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Closes the app's open run. At most one exists — see OpenRun.</summary>
     public void CloseRun(long appId, long endedTs)
     {
         using var cmd = _db.Connection.CreateCommand();
@@ -79,7 +90,7 @@ public sealed class AppStore
         cmd.CommandText = """
             SELECT app_id, started, ended FROM app_runs
             WHERE started <= $to AND (ended IS NULL OR ended >= $from)
-            ORDER BY started;
+            ORDER BY started, app_id;
             """;
         cmd.Parameters.AddWithValue("$from", fromTs);
         cmd.Parameters.AddWithValue("$to", toTs);

@@ -151,6 +151,21 @@ public class AppStoreTests : IDisposable
     }
 
     [Fact]
+    public void SecondOpenRunWithoutCloseIsANoOp()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+        var id = store.GetOrCreateAppId(@"D:\Games\a.exe");
+
+        store.OpenRun(id, 1000);
+        store.OpenRun(id, 1200);
+
+        var runs = store.ReadRuns(0, 9999);
+        Assert.Single(runs);
+        Assert.Equal(1000, runs[0].Started);
+    }
+
+    [Fact]
     public void CloseDanglingClosesEveryOpenRun()
     {
         using var db = new Db(_path);
@@ -182,6 +197,18 @@ public class AppStoreTests : IDisposable
 
         Assert.Single(store.ReadRuns(2000, 3000));
         Assert.Empty(store.ReadRuns(6000, 7000));
+    }
+
+    [Fact]
+    public void ReadRunsIncludesStillOpenRunThatStartedBeforeTheRange()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+        var id = store.GetOrCreateAppId(@"D:\Games\a.exe");
+
+        store.OpenRun(id, 1000);
+
+        Assert.Single(store.ReadRuns(2000, 3000));
     }
 
     [Fact]
