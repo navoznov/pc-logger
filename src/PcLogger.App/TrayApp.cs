@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Win32;
 using PcLogger.App.Win32;
 using PcLogger.Core.Config;
 using PcLogger.Core.Recording;
@@ -10,34 +11,74 @@ namespace PcLogger.App;
 public sealed class TrayApp : ApplicationContext
 {
     private readonly NotifyIcon _icon;
+    private readonly ContextMenuStrip _menu;
     private readonly System.Windows.Forms.Timer _timer;
     private readonly RecorderService _recorder;
     private readonly Db _db;
 
+    private int _failures;
+    private bool _stopped;
+
     public TrayApp(string dataDir)
     {
-        Directory.CreateDirectory(dataDir);
-        _db = new Db(Path.Combine(dataDir, "pclogger.db"));
-        _recorder = new RecorderService(new Win32SystemProbe(), new Win32ProcessProbe(), _db);
-
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("Отчёт", null, (_, _) => OpenReport(dataDir));
-        menu.Items.Add("Открыть папку данных", null, (_, _) => OpenFolder(dataDir));
-        menu.Items.Add("Игровые папки", null, (_, _) => OpenConfig(dataDir));
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Выход", null, (_, _) => Quit());
+        _menu = new ContextMenuStrip();
+        _menu.Items.Add("Отчёт", null, (_, _) => Guarded(() => OpenReport(dataDir)));
+        _menu.Items.Add("Открыть папку данных", null, (_, _) => Guarded(() => Open(dataDir)));
+        _menu.Items.Add("Игровые папки", null, (_, _) => Guarded(() => OpenConfig(dataDir)));
+        _menu.Items.Add(new ToolStripSeparator());
+        _menu.Items.Add("Выход", null, (_, _) => Quit());
 
         _icon = new NotifyIcon
         {
             Icon = SystemIcons.Application,
             Text = "PC Logger",
             Visible = true,
-            ContextMenuStrip = menu
+            ContextMenuStrip = _menu
         };
+
+        Directory.CreateDirectory(dataDir);
+        _db = new Db(Path.Combine(dataDir, "pclogger.db"));
+        _recorder = new RecorderService(new Win32SystemProbe(), new Win32ProcessProbe(), _db,
+                                        onError: OnRecorderError);
+
+        // Windows terminates the process on shutdown and logoff without running any menu item,
+        // so without this the tail bucket is lost and every open app_run stays open.
+        SystemEvents.SessionEnding += OnSessionEnding;
 
         _timer = new System.Windows.Forms.Timer { Interval = 1000 };
         _timer.Tick += (_, _) => _recorder.Tick(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         _timer.Start();
+    }
+
+    /// <summary>
+    /// A failure inside the recorder is invisible by construction: an absent bucket row reads
+    /// as "the PC was not running", which is exactly what a healthy evening away from the
+    /// computer looks like. The tray icon is the only place a person can learn otherwise.
+    /// </summary>
+    private void OnRecorderError(Exception e)
+    {
+        _failures++;
+        _icon.Text = Truncate($"PC Logger — сбой записи ({_failures})");
+        if (_failures == 1)
+        {
+            _icon.ShowBalloonTip(10_000, "PC Logger",
+                "Запись прервана: " + e.Message, ToolTipIcon.Warning);
+        }
+    }
+
+    // NotifyIcon.Text throws above 63 characters.
+    private static string Truncate(string text) => text.Length <= 63 ? text : text[..63];
+
+    private void Guarded(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception e)
+        {
+            MessageBox.Show(e.Message, "PC Logger", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void OpenReport(string dataDir)
@@ -56,8 +97,6 @@ public sealed class TrayApp : ApplicationContext
         Open(output);
     }
 
-    private static void OpenFolder(string dataDir) => Open(dataDir);
-
     private static void OpenConfig(string dataDir)
     {
         var path = Path.Combine(dataDir, "config.json");
@@ -68,12 +107,40 @@ public sealed class TrayApp : ApplicationContext
     private static void Open(string target) =>
         Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
 
-    private void Quit()
+    private void OnSessionEnding(object sender, SessionEndingEventArgs e) => StopRecording();
+
+    private void StopRecording()
     {
+        if (_stopped) return;
+        _stopped = true;
+
         _timer.Stop();
         _recorder.Stop(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         _icon.Visible = false;
-        _db.Dispose();
+    }
+
+    private void Quit()
+    {
+        StopRecording();
         ExitThread();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // A SystemEvents subscription is a static root: leaving it attached keeps this
+            // object alive for the life of the process.
+            SystemEvents.SessionEnding -= OnSessionEnding;
+            StopRecording();
+            _timer.Dispose();
+            // Without disposing the icon, a ghost survives in the notification area until the
+            // user hovers over it.
+            _icon.Dispose();
+            _menu.Dispose();
+            _db.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 }
