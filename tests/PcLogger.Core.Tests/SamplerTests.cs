@@ -45,14 +45,39 @@ public class SamplerTests
         Assert.Equal(4, bucket.Pad);
     }
 
+    // The dominant app is deliberately the EARLIER one here: if it were also the most recent,
+    // a plain "last app seen wins" implementation would pass and the test would prove nothing.
     [Fact]
     public void PicksForegroundAppThatHeldFocusLongest()
     {
         var sampler = new Sampler();
-        for (var t = 1000L; t < 1003L; t++) sampler.Tick(t, Typing(@"D:\a.exe"));
-        for (var t = 1003L; t < 1010L; t++) sampler.Tick(t, Typing(@"D:\b.exe"));
+        for (var t = 1000L; t < 1007L; t++) sampler.Tick(t, Typing(@"D:\a.exe"));
+        for (var t = 1007L; t < 1010L; t++) sampler.Tick(t, Typing(@"D:\b.exe"));
 
-        Assert.Equal(@"D:\b.exe", sampler.Tick(1010, Idle)!.Value.FgPath);
+        Assert.Equal(@"D:\a.exe", sampler.Tick(1010, Idle)!.Value.FgPath);
+    }
+
+    [Fact]
+    public void CapsCountedSecondsAtTheBucketSizeWhenTheClockStepsBack()
+    {
+        var sampler = new Sampler();
+        for (var t = 1000L; t < 1008L; t++) sampler.Tick(t, Typing());
+        // the clock is corrected backwards; seconds 1004..1007 arrive a second time
+        for (var t = 1004L; t < 1010L; t++) sampler.Tick(t, Typing());
+
+        var bucket = sampler.Tick(1010, Idle)!.Value;
+
+        Assert.Equal(10, bucket.Active);
+    }
+
+    [Fact]
+    public void CapsGamepadSecondsAtTheBucketSizeToo()
+    {
+        var sampler = new Sampler();
+        for (var t = 1000L; t < 1008L; t++) sampler.Tick(t, Pad());
+        for (var t = 1004L; t < 1010L; t++) sampler.Tick(t, Pad());
+
+        Assert.Equal(10, sampler.Tick(1010, Idle)!.Value.Pad);
     }
 
     [Fact]

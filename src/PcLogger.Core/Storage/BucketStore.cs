@@ -52,11 +52,17 @@ public sealed class BucketStore
         return result;
     }
 
-    /// <summary>Timestamp of the newest stored bucket, or null when the table is empty.</summary>
-    public long? LastTs()
+    /// <summary>
+    /// Timestamp of the newest stored bucket at or before <paramref name="notAfterTs"/>, or null
+    /// when there is none. The bound matters: a machine that boots once with a dead CMOS battery
+    /// writes a bucket decades in the future, and an unbounded MAX(ts) would then return that
+    /// reading forever, poisoning every later crash recovery.
+    /// </summary>
+    public long? LastTs(long notAfterTs)
     {
         using var cmd = _db.Connection.CreateCommand();
-        cmd.CommandText = "SELECT MAX(ts) FROM buckets;";
+        cmd.CommandText = "SELECT MAX(ts) FROM buckets WHERE ts <= $now;";
+        cmd.Parameters.AddWithValue("$now", notAfterTs);
         return cmd.ExecuteScalar() is long ts ? ts : null;
     }
 }

@@ -5,7 +5,7 @@ namespace PcLogger.Core.Storage;
 /// <summary>Owns the SQLite connection and applies schema migrations on open.</summary>
 public sealed class Db : IDisposable
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
 
     public SqliteConnection Connection { get; }
 
@@ -45,6 +45,12 @@ public sealed class Db : IDisposable
               ended   INTEGER
             );
             CREATE INDEX IF NOT EXISTS ix_app_runs_started ON app_runs(started);
+            CREATE TABLE IF NOT EXISTS events (
+              ts     INTEGER NOT NULL,
+              kind   TEXT NOT NULL,
+              detail TEXT
+            );
+            CREATE INDEX IF NOT EXISTS ix_events_ts ON events(ts);
             """);
         Execute($"INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', '{SchemaVersion}');");
     }

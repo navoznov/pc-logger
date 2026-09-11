@@ -34,8 +34,12 @@ public sealed class Sampler
             Reset(bucketTs);
         }
 
-        if (snapshot.Input) _active++;
-        if (snapshot.Gamepad) _pad++;
+        // Clamped to the bucket size: a backward clock step (W32Time correcting an RTC kept in
+        // local time, an NTP jump, a VM resumed from a snapshot) replays seconds into a bucket
+        // that already counted them. The schema and BuildIntensity both rest on 0..bucketSeconds,
+        // and an over-count renders as an intensity bar past 100 %.
+        if (snapshot.Input && _active < _bucketSeconds) _active++;
+        if (snapshot.Gamepad && _pad < _bucketSeconds) _pad++;
         if (!string.IsNullOrEmpty(snapshot.ForegroundPath))
         {
             var seen = _foreground.GetValueOrDefault(snapshot.ForegroundPath);

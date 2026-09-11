@@ -66,20 +66,28 @@ public sealed class AppStore
         cmd.ExecuteNonQuery();
     }
 
-    /// <summary>Closes the app's open run. At most one exists — see OpenRun.</summary>
+    /// <summary>
+    /// Closes the app's open run. At most one exists — see OpenRun.
+    /// MAX(started, ...) enforces ended >= started in SQL rather than trusting callers: a
+    /// backward clock step, or a crash recovery anchored at an older bucket, otherwise writes
+    /// a negative-length run, and such runs cover no slot and vanish from the report without
+    /// a trace instead of showing up as something odd to investigate.
+    /// </summary>
     public void CloseRun(long appId, long endedTs)
     {
         using var cmd = _db.Connection.CreateCommand();
-        cmd.CommandText = "UPDATE app_runs SET ended = $ended WHERE app_id = $id AND ended IS NULL;";
+        cmd.CommandText =
+            "UPDATE app_runs SET ended = MAX($ended, started) WHERE app_id = $id AND ended IS NULL;";
         cmd.Parameters.AddWithValue("$id", appId);
         cmd.Parameters.AddWithValue("$ended", endedTs);
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>Closes every open run at the given moment, or at its own start if that is later.</summary>
     public void CloseDangling(long endedTs)
     {
         using var cmd = _db.Connection.CreateCommand();
-        cmd.CommandText = "UPDATE app_runs SET ended = $ended WHERE ended IS NULL;";
+        cmd.CommandText = "UPDATE app_runs SET ended = MAX($ended, started) WHERE ended IS NULL;";
         cmd.Parameters.AddWithValue("$ended", endedTs);
         cmd.ExecuteNonQuery();
     }

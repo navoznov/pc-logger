@@ -222,4 +222,37 @@ public class AppStoreTests : IDisposable
         Assert.Equal(first, second);
         Assert.Single(new AppStore(db).AllPaths());
     }
+
+    // A run that ends before it starts covers no slot, so the reporting layer drops it
+    // silently rather than drawing something odd. The corruption is invisible, which is
+    // why the invariant is enforced in SQL at the only two places that write `ended`.
+    [Fact]
+    public void CloseRunNeverStampsAnEndBeforeTheStart()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+        var id = store.GetOrCreateAppId(@"D:\Games\a.exe");
+        store.OpenRun(id, 1000);
+
+        store.CloseRun(id, 900);
+
+        Assert.Equal(1000, store.ReadRuns(0, 5000).Single().Ended);
+    }
+
+    [Fact]
+    public void CloseDanglingNeverStampsAnEndBeforeTheStart()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+        var early = store.GetOrCreateAppId(@"D:\Games\a.exe");
+        var late = store.GetOrCreateAppId(@"D:\Games\b.exe");
+        store.OpenRun(early, 500);
+        store.OpenRun(late, 2000);
+
+        store.CloseDangling(900);
+
+        var runs = store.ReadRuns(0, 5000).OrderBy(r => r.Started).ToList();
+        Assert.Equal(900, runs[0].Ended);
+        Assert.Equal(2000, runs[1].Ended);
+    }
 }
