@@ -34,7 +34,10 @@ public sealed class Db : IDisposable
             );
             CREATE TABLE IF NOT EXISTS apps (
               id   INTEGER PRIMARY KEY AUTOINCREMENT,
-              path TEXT UNIQUE NOT NULL
+              -- NOCASE folds ASCII A-Z only, matching the OrdinalIgnoreCase cache in AppStore
+              -- for the paths we actually see. Non-ASCII case variants (e.g. Cyrillic) would
+              -- still create separate rows; unreachable in practice, not worth fixing.
+              path TEXT UNIQUE NOT NULL COLLATE NOCASE
             );
             CREATE TABLE IF NOT EXISTS app_runs (
               app_id  INTEGER NOT NULL,

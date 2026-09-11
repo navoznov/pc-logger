@@ -183,4 +183,16 @@ public class AppStoreTests : IDisposable
         Assert.Single(store.ReadRuns(2000, 3000));
         Assert.Empty(store.ReadRuns(6000, 7000));
     }
+
+    [Fact]
+    public void TreatsPathsDifferingOnlyInCaseAsTheSameApp()
+    {
+        using var db = new Db(_path);
+
+        var first = new AppStore(db).GetOrCreateAppId(@"D:\Games\A.exe");
+        var second = new AppStore(db).GetOrCreateAppId(@"d:\games\a.exe");
+
+        Assert.Equal(first, second);
+        Assert.Single(new AppStore(db).AllPaths());
+    }
 }
