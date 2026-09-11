@@ -94,7 +94,7 @@ public static class SpanBuilder
     private static string FileName(string path) => path.Split('\\', '/')[^1];
 
     public static Intensity BuildIntensity(
-        IReadOnlyList<Bucket> buckets, long fromTs, long toTs, int bucketSeconds = 10)
+        IReadOnlyList<Bucket> buckets, long fromTs, long toTs)
     {
         const int Step = 60;
         var start = fromTs - fromTs % Step;
@@ -103,8 +103,12 @@ public static class SpanBuilder
 
         foreach (var bucket in buckets)
         {
-            var index = (int)((bucket.Ts - start) / Step);
-            if (index < 0 || index >= minutes) continue;
+            // Integer division truncates toward zero, so a negative offset would land on
+            // index 0 instead of -1 and leak pre-window data into the first minute.
+            var offset = bucket.Ts - start;
+            if (offset < 0) continue;
+            var index = (int)(offset / Step);
+            if (index >= minutes) continue;
 
             // Keyboard and gamepad seconds may overlap within a bucket, so the
             // larger of the two is the only count that cannot exceed the bucket.

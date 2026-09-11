@@ -226,4 +226,27 @@ public class IntensityTests
 
         Assert.Equal(new int?[] { 33 }, intensity.V);
     }
+
+    [Fact]
+    public void BucketBeforeTheWindowDoesNotLeakIntoTheFirstMinute()
+    {
+        var buckets = Enumerable.Range(0, 6)
+            .Select(i => new Bucket(3600 + i * 10, 10, 0, null))
+            .Append(new Bucket(3590, 10, 0, null))
+            .ToArray();
+
+        var intensity = SpanBuilder.BuildIntensity(buckets, 3600, 3660);
+
+        Assert.Equal(new int?[] { 100 }, intensity.V);
+    }
+
+    [Fact]
+    public void MinuteStaysNullWhenOnlyTouchedByABucketBeforeTheWindow()
+    {
+        var buckets = new[] { new Bucket(3590, 10, 0, null) };
+
+        var intensity = SpanBuilder.BuildIntensity(buckets, 3600, 3660);
+
+        Assert.Equal(new int?[] { null }, intensity.V);
+    }
 }
