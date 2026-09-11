@@ -10,7 +10,9 @@ public class BucketStoreTests : IDisposable
 
     public void Dispose()
     {
-        if (File.Exists(_path)) File.Delete(_path);
+        // WAL mode leaves -wal and -shm sidecars next to the database.
+        foreach (var f in new[] { _path, _path + "-wal", _path + "-shm" })
+            if (File.Exists(f)) File.Delete(f);
     }
 
     [Fact]
