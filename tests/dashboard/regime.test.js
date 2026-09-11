@@ -41,6 +41,15 @@ test('an insufficient break keeps the block open and is marked short', () => {
   assert.deepEqual(gaps.map(g => g.kind), ['short']);
 });
 
+test('a gap of exactly microGap is short, not micro, and the block continues', () => {
+  const spans = [span(0, 15, 'active'), span(18, 15, 'active')];
+
+  const { blocks, gaps } = Regime.buildBlocks(spans, OPTS);
+
+  assert.equal(blocks.length, 1);
+  assert.deepEqual(gaps.map(g => g.kind), ['short']);
+});
+
 test('block duration counts wall time but screen time excludes inner pauses', () => {
   const spans = [span(0, 15, 'active'), span(15, 8, 'away'), span(23, 15, 'active')];
 
@@ -71,6 +80,7 @@ test('a powered-off gap breaks the block exactly like an away gap', () => {
     [span(0, 15, 'active'), span(15, 15, 'away'), span(30, 15, 'active')], OPTS);
 
   assert.deepEqual(withOff.blocks, withAway.blocks);
+  assert.deepEqual(withOff.gaps, withAway.gaps);
 });
 
 test('thresholds are configurable and change the verdict', () => {
