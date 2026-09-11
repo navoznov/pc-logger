@@ -1,17 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PcLogger.Core\PcLogger.Core.csproj" />
+  </ItemGroup>
+
   <PropertyGroup>
+    <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="dashboard\**\*" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
 
 </Project>

@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PC Logger</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --fg: #1d1d1b; --muted: #6b6b66; --line: #dedbd4;
+    --card: #ffffff; --ok: #4f9d69; --over: #c4574a; --short: #d8a340;
+    --rest: #e8e6e0; --offc: #cdcac3; --game-fg: #4a6fa5; --game-bg: #a8bcd8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1a1a18; --fg: #eceae4; --muted: #9a978f; --line: #34332f;
+      --card: #232320; --ok: #6fbd88; --over: #e0776a; --short: #e8bb60;
+      --rest: #3a3935; --offc: #2a2926; --game-fg: #7a9fd5; --game-bg: #47597a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 16px; background: var(--bg); color: var(--fg);
+         font: 14px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
+  h1 { font-size: 18px; margin: 0 12px 0 0; font-weight: 600; }
+  button, select { background: var(--card); color: var(--fg); border: 1px solid var(--line);
+                   border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
+  .kpis { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+         padding: 10px 14px; min-width: 120px; }
+  .kpi .label { color: var(--muted); font-size: 12px; }
+  .kpi .value { font-size: 20px; font-weight: 600; }
+  .tracks { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+            padding: 14px; margin-bottom: 18px; }
+  .track-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .track-name { width: 96px; flex: none; color: var(--muted); font-size: 12px; text-align: right; }
+  .track { position: relative; height: 22px; flex: 1; background: var(--offc);
+           border-radius: 4px; overflow: hidden; }
+  .seg { position: absolute; top: 0; bottom: 0; }
+  /* The regime verdict must not rely on hue alone: red/green is the most common
+     colour-vision deficiency, and this track answers the report's whole question. */
+  .seg.over { background-image: repeating-linear-gradient(45deg,
+      rgba(0,0,0,.28) 0 3px, rgba(0,0,0,0) 3px 7px); }
+  .axis { display: flex; margin-left: 106px; color: var(--muted); font-size: 11px;
+          border-top: 1px solid var(--line); padding-top: 4px; }
+  .axis span { flex: 1; }
+  #intensity { display: block; width: 100%; height: 48px; margin-left: 0; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+           padding: 14px; margin-bottom: 18px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  .sliders { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 18px;
+             color: var(--muted); font-size: 12px; }
+  .sliders label { display: flex; align-items: center; gap: 6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted);
+            font-size: 12px; margin-top: 10px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>PC Logger</h1>
+    <button id="prev">←</button>
+    <select id="day"></select>
+    <button id="next">→</button>
+    <button id="mode">Неделя</button>
+  </header>
+
+  <div class="sliders">
+    <label>Блок, мин <input type="range" id="session" min="5" max="60" step="5"><b id="sessionV"></b></label>
+    <label>Перерыв, мин <input type="range" id="break" min="5" max="60" step="5"><b id="breakV"></b></label>
+    <label>Микропауза, мин <input type="range" id="micro" min="1" max="10" step="1"><b id="microV"></b></label>
+    <label>Допуск, мин <input type="range" id="tol" min="0" max="10" step="1"><b id="tolV"></b></label>
+  </div>
+
+  <section id="dayView">
+    <div class="kpis" id="kpis"></div>
+
+    <div class="tracks">
+      <div class="track-row"><div class="track-name">ПК включён</div><div class="track" id="tPower"></div></div>
+      <div class="track-row"><div class="track-name">Активность</div><div class="track" id="tActive"></div></div>
+      <div class="track-row"><div class="track-name">Игра</div><div class="track" id="tGame"></div></div>
+      <div class="track-row"><div class="track-name">Режим</div><div class="track" id="tRegime"></div></div>
+      <div class="axis" id="axis"></div>
+      <svg id="intensity" preserveAspectRatio="none"></svg>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--ok)"></i>в пределах нормы</span>
+        <span><i class="dot" style="background:var(--over)"></i>превышение</span>
+        <span><i class="dot" style="background:var(--short)"></i>недостаточный перерыв</span>
+        <span><i class="dot" style="background:var(--rest)"></i>перерыв</span>
+        <span><i class="dot" style="background:var(--game-fg)"></i>игра в фокусе</span>
+        <span><i class="dot" style="background:var(--game-bg)"></i>игра в фоне</span>
+      </div>
+    </div>
+
+    <div class="panel" id="selection">Выдели участок на любой дорожке, чтобы увидеть статистику за период.</div>
+
+    <div class="panel">
+      <table>
+        <thead><tr><th>Начало</th><th>Длительность</th><th>Экранное время</th><th>Перерыв после</th><th>Вердикт</th></tr></thead>
+        <tbody id="blocks"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="weekView" class="hidden"></section>
+</div>
+
+<script src="regime.js"></script>
+<script src="selection.js"></script>
+<script src="render.js"></script>
+<script>
+const DATA = /*__DATA__*/;
+
+const opts = {
+  sessionMinutes: DATA.defaults.session_minutes,
+  breakMinutes: DATA.defaults.break_minutes,
+  microGap: DATA.defaults.micro_gap,
+  tolerance: DATA.defaults.tolerance
+};
+
+const COLORS = { ok: 'var(--ok)', over: 'var(--over)', short: 'var(--short)',
+                 break: 'var(--rest)', micro: 'var(--rest)',
+                 fg: 'var(--game-fg)', bg: 'var(--game-bg)' };
+
+let view = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes);
+
+function fillDayPicker() {
+  const picker = document.getElementById('day');
+  const first = DATA.spans.length ? DATA.spans[0].t : DATA.generated;
+  picker.innerHTML = '';
+  for (let d = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes).from; d >= first; d -= 86400) {
+    const option = document.createElement('option');
+    option.value = d;
+    option.textContent = new Date((d + DATA.tz_offset_minutes * 60) * 1000)
+      .toISOString().slice(0, 10);
+    picker.appendChild(option);
+  }
+  picker.value = view.from;
+}
+
+function paint(trackId, boxes, color) {
+  const track = document.getElementById(trackId);
+  track.innerHTML = '';
+  boxes.forEach(function (box) {
+    const div = document.createElement('div');
+    div.className = box.item.verdict === 'over' ? 'seg over' : 'seg';
+    div.style.left = box.left + '%';
+    div.style.width = box.width + '%';
+    div.style.backgroundColor = color(box.item);
+    div.title = Render.fmtDuration(box.item.d);
+    track.appendChild(div);
+  });
+}
+
+function drawIntensity() {
+  const svg = document.getElementById('intensity');
+  const minutes = Math.round((view.to - view.from) / DATA.intensity.step);
+  const offset = Math.round((view.from - DATA.intensity.t0) / DATA.intensity.step);
+  let path = '';
+  for (let i = 0; i < minutes; i++) {
+    const value = DATA.intensity.v[offset + i];
+    if (value == null || value === 0) continue;
+    const x = (i / minutes) * 100;
+    const w = (1 / minutes) * 100;
+    path += '<rect x="' + x + '" y="' + (100 - value) + '" width="' + w +
+            '" height="' + value + '" fill="var(--game-fg)" opacity="0.55"/>';
+  }
+  svg.setAttribute('viewBox', '0 0 100 100');
+  svg.innerHTML = path;
+}
+
+function drawAxis() {
+  const axis = document.getElementById('axis');
+  axis.innerHTML = '';
+  for (let hour = 0; hour < 24; hour += 3) {
+    const span = document.createElement('span');
+    span.textContent = String(hour).padStart(2, '0') + ':00';
+    axis.appendChild(span);
+  }
+}
+
+function drawKpis(blocks, gaps, stats) {
+  const breaks = gaps.filter(function (g) { return g.kind === 'break'; })
+    .map(function (g) { return g.d; }).sort(function (a, b) { return a - b; });
+  const median = breaks.length ? breaks[Math.floor(breaks.length / 2)] : 0;
+  const longest = blocks.reduce(function (max, b) { return Math.max(max, b.d); }, 0);
+
+  const cards = [
+    ['Всего за ПК', Render.fmtDuration(stats.active)],
+    ['Блоков', String(blocks.length)],
+    ['Нарушений', String(blocks.filter(function (b) { return b.verdict === 'over'; }).length)],
+    ['Самый длинный блок', Render.fmtDuration(longest)],
+    ['Медиана перерыва', Render.fmtDuration(median)]
+  ];
+
+  document.getElementById('kpis').innerHTML = cards.map(function (card) {
+    return '<div class="kpi"><div class="label">' + card[0] +
+           '</div><div class="value">' + card[1] + '</div></div>';
+  }).join('');
+}
+
+function drawBlocksTable(blocks, gaps) {
+  document.getElementById('blocks').innerHTML = blocks.map(function (block) {
+    const after = gaps.find(function (g) { return g.t === block.t + block.d; });
+    const time = new Date((block.t + DATA.tz_offset_minutes * 60) * 1000)
+      .toISOString().slice(11, 16);
+    return '<tr><td>' + time + '</td><td>' + Render.fmtDuration(block.d) +
+      '</td><td>' + Render.fmtDuration(block.screen) +
+      '</td><td>' + (after ? Render.fmtDuration(after.d) : '—') +
+      '</td><td><i class="dot" style="background:' + COLORS[block.verdict] + '"></i>' +
+      (block.verdict === 'ok' ? 'ок' : 'превышение') + '</td></tr>';
+  }).join('');
+}
+
+function showSelection(from, to) {
+  const stats = Selection.stats(DATA.spans, DATA.game_spans, from, to);
+  const time = function (ts) {
+    return new Date((ts + DATA.tz_offset_minutes * 60) * 1000).toISOString().slice(11, 16);
+  };
+  document.getElementById('selection').innerHTML =
+    '<b>Выделено: ' + time(from) + ' – ' + time(to) + '</b> · ' +
+    Render.fmtDuration(stats.total) +
+    '<table><tr><td>За ПК</td><td>' + Render.fmtDuration(stats.active) +
+      '</td><td>' + stats.pct.active + ' %</td></tr>' +
+    '<tr><td>Не за ПК</td><td>' + Render.fmtDuration(stats.away + stats.off) +
+      '</td><td>' + (stats.pct.away + stats.pct.off) + ' %</td></tr>' +
+    '<tr><td>— отходил</td><td>' + Render.fmtDuration(stats.away) + '</td><td></td></tr>' +
+    '<tr><td>— ПК был выключен</td><td>' + Render.fmtDuration(stats.off) + '</td><td></td></tr>' +
+    '<tr><td>Игра в фокусе</td><td>' + Render.fmtDuration(stats.gameFg) +
+      '</td><td>' + stats.pct.gameFg + ' %</td></tr>' +
+    '<tr><td>За ПК : не за ПК</td><td colspan="2">' +
+      (stats.ratio === null ? '—' : stats.ratio.toFixed(1) + ' : 1') + '</td></tr></table>';
+}
+
+function enableBrush(trackId) {
+  const track = document.getElementById(trackId);
+  let anchor = null;
+
+  const toTime = function (event) {
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    return view.from + ratio * (view.to - view.from);
+  };
+
+  track.addEventListener('mousedown', function (event) { anchor = toTime(event); });
+  track.addEventListener('mouseup', function (event) {
+    if (anchor === null) return;
+    const other = toTime(event);
+    const from = Math.round(Math.min(anchor, other));
+    const to = Math.round(Math.max(anchor, other));
+    anchor = null;
+    if (to - from >= 60) showSelection(from, to);
+  });
+}
+
+function draw() {
+  const spans = DATA.spans.filter(function (s) {
+    return s.t + s.d > view.from && s.t < view.to;
+  });
+  const result = Regime.buildBlocks(spans, opts);
+
+  paint('tPower', Render.layout(spans.filter(function (s) { return s.s !== 'off'; }), view.from, view.to),
+        function () { return 'var(--ok)'; });
+  paint('tActive', Render.layout(spans.filter(function (s) { return s.s === 'active'; }), view.from, view.to),
+        function () { return 'var(--game-fg)'; });
+  paint('tGame', Render.layout(DATA.game_spans, view.from, view.to),
+        function (item) { return COLORS[item.lvl]; });
+  paint('tRegime', Render.layout(result.blocks.concat(result.gaps), view.from, view.to),
+        function (item) { return COLORS[item.verdict || item.kind]; });
+
+  drawAxis();
+  drawIntensity();
+  drawKpis(result.blocks, result.gaps, Selection.stats(spans, DATA.game_spans, view.from, view.to));
+  drawBlocksTable(result.blocks, result.gaps);
+}
+
+['session', 'break', 'micro', 'tol'].forEach(function (id) {
+  const key = { session: 'sessionMinutes', break: 'breakMinutes',
+                micro: 'microGap', tol: 'tolerance' }[id];
+  const input = document.getElementById(id);
+  input.value = opts[key];
+  document.getElementById(id + 'V').textContent = opts[key];
+  input.addEventListener('input', function () {
+    opts[key] = Number(input.value);
+    document.getElementById(id + 'V').textContent = input.value;
+    draw();
+  });
+});
+
+document.getElementById('day').addEventListener('change', function (event) {
+  view = { from: Number(event.target.value), to: Number(event.target.value) + 86400 };
+  draw();
+});
+document.getElementById('prev').addEventListener('click', function () {
+  view = { from: view.from - 86400, to: view.to - 86400 };
+  document.getElementById('day').value = view.from;
+  draw();
+});
+document.getElementById('next').addEventListener('click', function () {
+  view = { from: view.from + 86400, to: view.to + 86400 };
+  document.getElementById('day').value = view.from;
+  draw();
+});
+
+['tPower', 'tActive', 'tGame', 'tRegime'].forEach(enableBrush);
+fillDayPicker();
+draw();
+</script>
+</body>
+</html>
