@@ -86,11 +86,13 @@ public sealed class TrayApp : ApplicationContext
         var config = AppConfig.Load(Path.Combine(dataDir, "config.json"));
         var json = new ReportBuilder(_db, config).BuildJson(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
+        // The folder beside the exe wins so the report can be re-styled without a rebuild, but
+        // deleting it no longer breaks anything: the same files are embedded in the assembly.
         var dashboard = Path.Combine(AppContext.BaseDirectory, "dashboard");
-        var html = ReportBuilder.Render(
-            File.ReadAllText(Path.Combine(dashboard, "dashboard.template.html")),
-            json,
-            name => File.ReadAllText(Path.Combine(dashboard, name)));
+        var template = DashboardAssets.Read("dashboard.template.html", dashboard)
+            ?? throw new InvalidOperationException("dashboard template missing");
+
+        var html = ReportBuilder.Render(template, json, name => DashboardAssets.Read(name, dashboard));
 
         var output = Path.Combine(Path.GetTempPath(), "pclogger-report.html");
         File.WriteAllText(output, html);

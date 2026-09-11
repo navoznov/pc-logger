@@ -12,6 +12,9 @@
 
   <ItemGroup>
     <None Include="dashboard\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Also embedded: spec §4 wants a copy inside the exe as a fallback, so deleting the
+         folder beside it degrades the report's provenance rather than breaking it. -->
+    <EmbeddedResource Include="dashboard\**\*" LogicalName="dashboard/%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

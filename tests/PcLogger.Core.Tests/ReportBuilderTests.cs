@@ -202,6 +202,40 @@ public class BuildJsonTests : IDisposable
 
     // Nothing pinned the history depth, so doubling the constant left the suite green while
     // every report silently covered 180 days.
+    // Spec §4: a copy lives inside the exe, so deleting the folder beside it cannot break the
+    // report. Without this the template read was an unhandled FileNotFoundException.
+    [Fact]
+    public void EmbedsEveryDashboardAssetInTheAssembly()
+    {
+        Assert.Equal(
+            new[] { "dashboard.template.html", "regime.js", "render.js", "selection.js" },
+            DashboardAssets.EmbeddedNames());
+    }
+
+    [Fact]
+    public void ReadsAnEmbeddedAssetWhenThereIsNoFileOnDisk()
+    {
+        var html = DashboardAssets.Read("dashboard.template.html", "/no/such/directory");
+
+        Assert.Contains("/*__DATA__*/", html);
+    }
+
+    [Fact]
+    public void PrefersTheCopyOnDiskSoAReportCanBeRestyledWithoutARebuild()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"pclog-dash-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "render.js"), "// edited by hand");
+        try
+        {
+            Assert.Equal("// edited by hand", DashboardAssets.Read("render.js", dir));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
     [Fact]
     public void RefusesToRenderAScriptTagItCouldNotInline()
     {
