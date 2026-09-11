@@ -126,6 +126,8 @@ const COLORS = { ok: 'var(--ok)', over: 'var(--over)', short: 'var(--short)',
                  break: 'var(--rest)', micro: 'var(--rest)',
                  fg: 'var(--game-fg)', bg: 'var(--game-bg)' };
 
+const SELECTION_PROMPT = 'Выдели участок на любой дорожке, чтобы увидеть статистику за период.';
+
 let view = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes);
 
 function fillDayPicker() {
@@ -247,7 +249,7 @@ function enableBrush(trackId) {
   };
 
   track.addEventListener('mousedown', function (event) { anchor = toTime(event); });
-  track.addEventListener('mouseup', function (event) {
+  document.addEventListener('mouseup', function (event) {
     if (anchor === null) return;
     const other = toTime(event);
     const from = Math.round(Math.min(anchor, other));
@@ -258,6 +260,8 @@ function enableBrush(trackId) {
 }
 
 function draw() {
+  document.getElementById('selection').innerHTML = SELECTION_PROMPT;
+
   const spans = DATA.spans.filter(function (s) {
     return s.t + s.d > view.from && s.t < view.to;
   });
