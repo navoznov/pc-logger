@@ -8,13 +8,15 @@
   :root {
     --bg: #fbfbfa; --fg: #1d1d1b; --muted: #6b6b66; --line: #dedbd4;
     --card: #ffffff; --ok: #4f9d69; --over: #c4574a; --short: #d8a340;
-    --rest: #e8e6e0; --offc: #cdcac3; --game-fg: #4a6fa5; --game-bg: #a8bcd8;
+    --rest: #fbf6e4; --offc: #c4c1b9; --game-fg: #4a6fa5; --game-bg: #a8bcd8;
+    --offhatch: rgba(0,0,0,.20); --rest-edge: #8d8877;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #1a1a18; --fg: #eceae4; --muted: #9a978f; --line: #34332f;
       --card: #232320; --ok: #6fbd88; --over: #e0776a; --short: #e8bb60;
-      --rest: #3a3935; --offc: #2a2926; --game-fg: #7a9fd5; --game-bg: #47597a;
+      --rest: #57533f; --offc: #2f2e2a; --game-fg: #7a9fd5; --game-bg: #47597a;
+      --offhatch: rgba(255,255,255,.22); --rest-edge: #a49d88;
     }
   }
   * { box-sizing: border-box; }
@@ -41,19 +43,33 @@
      colour-vision deficiency, and this track answers the report's whole question. */
   .seg.over, .bar.over { background-image: repeating-linear-gradient(45deg,
       rgba(0,0,0,.28) 0 3px, rgba(0,0,0,0) 3px 7px); }
+  /* The spec's grey hatch for "PC off". Without it the regime track spends three distinct
+     meanings — a real break, away time inside no block, and a machine that was not running —
+     on one flat swatch, and the break the whole report is about is the one that disappears. */
+  .seg.off { background-image: repeating-linear-gradient(45deg,
+      var(--offhatch) 0 2px, rgba(0,0,0,0) 2px 6px); }
+  /* Two neutral fills, one of them the empty track, cannot be pushed to a 3:1 luminance ratio
+     without wrecking the palette. So a break is marked by shape as well as colour — the same
+     answer already used for превышение, and what 1.4.11 actually asks for: not colour alone. */
+  .seg.brk { box-shadow: inset 0 0 0 1px var(--rest-edge); }
   .axis { display: flex; margin-left: 106px; color: var(--muted); font-size: 11px;
           border-top: 1px solid var(--line); padding-top: 4px; }
-  .axis span { flex: 1; }
+  .axis span { flex: 1; min-width: 0; }
+  @media (max-width: 700px) { .axis span.dense { display: none; } }
   /* Same 106px gutter as .axis: 96px label + 10px gap. The histogram claims to share the
      tracks' clock, and starting it at the card edge stretched the same 24 hours over a wider
      box — the same timestamp landed up to 106px, about 2.4 hours, to the left. */
   #intensity { display: block; width: calc(100% - 106px); height: 48px; margin-left: 106px; }
   .panel { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
            padding: 14px; margin-bottom: 18px; }
+  .scroll-x { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   th { color: var(--muted); font-weight: 500; font-size: 12px; }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  .off-dot { background-color: var(--offc); background-image: repeating-linear-gradient(45deg,
+      var(--offhatch) 0 2px, rgba(0,0,0,0) 2px 6px); }
+  .rest-dot { background-color: var(--rest); box-shadow: inset 0 0 0 1px var(--rest-edge); }
   .sliders { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 18px;
              color: var(--muted); font-size: 12px; }
   .sliders label { display: flex; align-items: center; gap: 6px; }
@@ -66,7 +82,11 @@
   .heat-axis { display: flex; color: var(--muted); font-size: 11px;
                border-top: 1px solid var(--line); padding-top: 4px; }
   .heat-axis span { flex: 1; }
-  .bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; }
+  .bars { position: relative; display: flex; align-items: flex-end; gap: 6px; height: 120px; }
+  .norm-line { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--over);
+               pointer-events: none; }
+  .norm-label { position: absolute; right: 0; bottom: 2px; font-size: 11px; color: var(--over);
+                background: var(--card); padding: 0 4px; }
   .bars-scale { color: var(--muted); font-size: 11px; text-align: right; margin-bottom: 4px; }
   .bar { flex: 1; background-color: var(--game-fg); border-radius: 3px 3px 0 0; }
   .bar.over { background-color: var(--over); }
@@ -92,7 +112,10 @@
     <label>Перерыв, мин <input type="range" id="break" min="5" max="60" step="5"><b id="breakV"></b></label>
     <label>Микропауза, мин <input type="range" id="micro" min="1" max="10" step="1"><b id="microV"></b></label>
     <label>Допуск, мин <input type="range" id="tol" min="0" max="10" step="1"><b id="tolV"></b></label>
+    <label>Норма в день, ч <input type="range" id="norm" min="1" max="8" step="1"><b id="normV"></b></label>
   </div>
+
+  <div class="panel" id="selection">Выдели участок на дорожке или на строке недели, чтобы увидеть статистику за период.</div>
 
   <section id="dayView">
     <div class="panel warn hidden" id="health"></div>
@@ -109,17 +132,18 @@
         <span><i class="dot" style="background:var(--ok)"></i>в пределах нормы</span>
         <span><i class="dot" style="background:var(--over)"></i>превышение</span>
         <span><i class="dot" style="background:var(--short)"></i>недостаточный перерыв</span>
-        <span><i class="dot" style="background:var(--rest)"></i>перерыв</span>
+        <span><i class="dot rest-dot"></i>перерыв</span>
+        <span><i class="dot off-dot"></i>ПК выключен</span>
         <span><i class="dot" style="background:var(--game-fg)"></i>игра в фокусе</span>
         <span><i class="dot" style="background:var(--game-bg)"></i>игра в фоне</span>
       </div>
     </div>
 
-    <div class="panel" id="selection">Выдели участок на любой дорожке, чтобы увидеть статистику за период.</div>
+    <div class="panel" id="games"></div>
 
-    <div class="panel">
+    <div class="panel scroll-x">
       <table>
-        <thead><tr><th>Начало</th><th>Длительность</th><th>Экранное время</th><th>Перерыв после</th><th>Вердикт</th></tr></thead>
+        <thead><tr><th>Начало</th><th>Длительность</th><th>Экранное время</th><th>Перерыв после</th><th>Топ-приложение</th><th>Вердикт</th></tr></thead>
         <tbody id="blocks"></tbody>
       </table>
     </div>
@@ -150,17 +174,21 @@ const opts = {
   sessionMinutes: DATA.defaults.session_minutes,
   breakMinutes: DATA.defaults.break_minutes,
   microGap: DATA.defaults.micro_gap,
-  tolerance: DATA.defaults.tolerance
+  tolerance: DATA.defaults.tolerance,
+  dayNormHours: DATA.defaults.day_norm_hours
 };
 
 const COLORS = { ok: 'var(--ok)', over: 'var(--over)', short: 'var(--short)',
-                 break: 'var(--rest)', micro: 'var(--rest)',
+                 break: 'var(--rest)',
                  fg: 'var(--game-fg)', bg: 'var(--game-bg)' };
 
-const SELECTION_PROMPT = 'Выдели участок на любой дорожке, чтобы увидеть статистику за период.';
+const SELECTION_PROMPT =
+  'Выдели участок на дорожке или на строке недели, чтобы увидеть статистику за период.';
 
 let view = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes);
 let regimeCache = null;
+let selected = null;
+let dayRange = { first: 0, last: 0 };
 
 // Built over the WHOLE history and only then split by day. Building it from day-filtered
 // spans made a session crossing midnight into the same block twice — once on each day, each
@@ -174,15 +202,35 @@ function regimeIn(from, to) {
 function fillDayPicker() {
   const picker = document.getElementById('day');
   const first = DATA.spans.length ? DATA.spans[0].t : DATA.generated;
+  const last = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes).from;
   picker.innerHTML = '';
-  for (let d = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes).from; d >= first; d -= 86400) {
+  for (let d = last; d >= first; d -= 86400) {
     const option = document.createElement('option');
     option.value = d;
     option.textContent = new Date((d + DATA.tz_offset_minutes * 60) * 1000)
       .toISOString().slice(0, 10);
     picker.appendChild(option);
   }
+  dayRange = { first: Number(picker.options[picker.options.length - 1].value), last: last };
   picker.value = view.from;
+}
+
+// Walking past the newest day used to leave the picker on no option at all: the header showed
+// no date, everything rendered zeroes, and the only way back was an unknown number of clicks.
+function goToDay(from) {
+  const day = Math.min(dayRange.last, Math.max(dayRange.first, from));
+  view = { from: day, to: day + 86400 };
+  document.getElementById('day').value = day;
+  document.getElementById('prev').disabled = day <= dayRange.first;
+  document.getElementById('next').disabled = day >= dayRange.last;
+  selected = null;
+  redraw();
+}
+
+function segClass(item) {
+  if (item.s === 'off') return 'seg off';
+  if (item.kind === 'break') return 'seg brk';
+  return item.verdict === 'over' ? 'seg over' : 'seg';
 }
 
 function paint(trackId, boxes, color) {
@@ -190,7 +238,7 @@ function paint(trackId, boxes, color) {
   track.innerHTML = '';
   boxes.forEach(function (box) {
     const div = document.createElement('div');
-    div.className = box.item.verdict === 'over' ? 'seg over' : 'seg';
+    div.className = segClass(box.item);
     div.style.left = box.left + '%';
     div.style.width = box.width + '%';
     div.style.backgroundColor = color(box.item);
@@ -242,6 +290,8 @@ function drawAxis() {
   for (let hour = 0; hour < 24; hour += 3) {
     const span = document.createElement('span');
     span.textContent = String(hour).padStart(2, '0') + ':00';
+    // Eight labels have no room on a phone and butt into each other; CSS drops these four.
+    if (hour % 6 !== 0) span.className = 'dense';
     axis.appendChild(span);
   }
 }
@@ -266,20 +316,95 @@ function drawKpis(blocks, gaps, stats) {
   }).join('');
 }
 
-function drawBlocksTable(blocks, gaps) {
-  document.getElementById('blocks').innerHTML = blocks.map(function (block) {
-    const after = gaps.find(function (g) { return g.t === block.t + block.d; });
-    const time = new Date((block.t + DATA.tz_offset_minutes * 60) * 1000)
-      .toISOString().slice(11, 16);
-    return '<tr><td>' + time + '</td><td>' + Render.fmtDuration(block.d) +
-      '</td><td>' + Render.fmtDuration(block.screen) +
-      '</td><td>' + (after ? Render.fmtDuration(after.d) : '—') +
-      '</td><td><i class="dot" style="background:' + COLORS[block.verdict] + '"></i>' +
-      (block.verdict === 'ok' ? 'ок' : 'превышение') + '</td></tr>';
-  }).join('');
+// Sums a span list over a window and returns the name with the most time, or null.
+function topBy(spans, from, to, keep) {
+  const totals = new Map();
+  (spans || []).forEach(function (s) {
+    if (keep && !keep(s)) return;
+    const covered = Math.min(s.t + s.d, to) - Math.max(s.t, from);
+    if (covered > 0) totals.set(s.app, (totals.get(s.app) || 0) + covered);
+  });
+  return totals;
 }
 
+function clockOf(ts) {
+  return new Date((ts + DATA.tz_offset_minutes * 60) * 1000).toISOString().slice(11, 16);
+}
+
+// Built through the DOM rather than by concatenating innerHTML, because `app` is the first
+// string in this report that comes from the child's machine rather than from our own code.
+// A filename cannot contain angle brackets on Windows, so this is defence in depth — but the
+// browser side is XSS-free by construction today and it should stay that way for free.
+function drawBlocksTable(blocks, gaps) {
+  const body = document.getElementById('blocks');
+  body.innerHTML = '';
+
+  blocks.forEach(function (block) {
+    const after = gaps.find(function (g) { return g.t === block.t + block.d; });
+    const apps = topBy(DATA.app_spans, block.t, block.t + block.d);
+    let top = null;
+    let best = 0;
+    apps.forEach(function (value, app) { if (value > best) { best = value; top = app; } });
+
+    const row = document.createElement('tr');
+    [clockOf(block.t), Render.fmtDuration(block.d), Render.fmtDuration(block.screen),
+     after ? Render.fmtDuration(after.d) : '—', top || '—'].forEach(function (text) {
+      const td = document.createElement('td');
+      td.textContent = text;
+      row.appendChild(td);
+    });
+
+    const verdict = document.createElement('td');
+    const dot = document.createElement('i');
+    dot.className = 'dot';
+    dot.style.backgroundColor = COLORS[block.verdict];
+    verdict.appendChild(dot);
+    verdict.appendChild(document.createTextNode(block.verdict === 'ok' ? 'ок' : 'превышение'));
+    row.appendChild(verdict);
+
+    body.appendChild(row);
+  });
+}
+
+// §8.1's «во что играл»: the only place the report names a game. Without it the game track is
+// unlabelled colour, and app_spans was payload nobody read.
+function drawGamesOfDay() {
+  const panel = document.getElementById('games');
+  const totals = topBy(DATA.game_spans, view.from, view.to,
+                       function (s) { return s.lvl === 'fg'; });
+
+  panel.innerHTML = '';
+  const title = document.createElement('b');
+  title.textContent = 'Во что играл: ';
+  panel.appendChild(title);
+
+  if (totals.size === 0) {
+    panel.appendChild(document.createTextNode('в этот день игр в фокусе не было.'));
+    return;
+  }
+
+  Array.from(totals.entries())
+    .sort(function (a, b) { return b[1] - a[1]; })
+    .forEach(function (entry, index) {
+      if (index > 0) panel.appendChild(document.createTextNode(' · '));
+      const name = document.createElement('span');
+      name.textContent = entry[0];
+      panel.appendChild(name);
+      panel.appendChild(document.createTextNode(' — ' + Render.fmtDuration(entry[1])));
+    });
+}
+
+function clearSelection() {
+  selected = null;
+  document.getElementById('selection').innerHTML = SELECTION_PROMPT;
+}
+
+// The selection panel is deliberately independent of the thresholds, so a repaint must restore
+// it rather than delete it: the natural workflow is to select an evening and then wiggle the
+// sliders to see whether the verdict holds, and that is impossible if every wiggle throws the
+// selection away.
 function showSelection(from, to) {
+  selected = { from: from, to: to };
   const stats = Selection.stats(DATA.spans, DATA.game_spans, from, to);
   const time = function (ts) {
     return new Date((ts + DATA.tz_offset_minutes * 60) * 1000).toISOString().slice(11, 16);
@@ -317,11 +442,13 @@ function enableBrush(trackId) {
     const to = Math.round(Math.max(anchor, other));
     anchor = null;
     if (to - from >= 60) showSelection(from, to);
+    else clearSelection();   // a plain click means "never mind", not "keep the old numbers
   });
 }
 
 function draw() {
-  document.getElementById('selection').innerHTML = SELECTION_PROMPT;
+  if (selected) showSelection(selected.from, selected.to);
+  else clearSelection();
 
   const spans = DATA.spans.filter(function (s) {
     return s.t + s.d > view.from && s.t < view.to;
@@ -334,19 +461,27 @@ function draw() {
         function () { return 'var(--game-fg)'; });
   paint('tGame', Render.layout(DATA.game_spans, view.from, view.to),
         function (item) { return COLORS[item.lvl]; });
-  paint('tRegime', Render.layout(result.blocks.concat(result.gaps), view.from, view.to),
-        function (item) { return COLORS[item.verdict || item.kind]; });
+  // Painted under the blocks: off spans say "nothing was observed here", which is a different
+  // statement from "he rested". A micro pause is glued into its block by definition (§6.3), so
+  // drawing it in the break colour put a break-coloured notch inside a block — at a 10-minute
+  // micro setting it looks exactly like a real break.
+  const regimeItems = spans.filter(function (s) { return s.s === 'off'; })
+    .concat(result.blocks)
+    .concat(result.gaps.filter(function (g) { return g.kind !== 'micro'; }));
+  paint('tRegime', Render.layout(regimeItems, view.from, view.to),
+        function (item) { return item.s === 'off' ? 'var(--offc)' : COLORS[item.verdict || item.kind]; });
 
   drawHealth();
   drawAxis();
   drawIntensity();
   drawKpis(result.blocks, result.gaps, Selection.stats(spans, DATA.game_spans, view.from, view.to));
   drawBlocksTable(result.blocks, result.gaps);
+  drawGamesOfDay();
 }
 
-['session', 'break', 'micro', 'tol'].forEach(function (id) {
+['session', 'break', 'micro', 'tol', 'norm'].forEach(function (id) {
   const key = { session: 'sessionMinutes', break: 'breakMinutes',
-                micro: 'microGap', tol: 'tolerance' }[id];
+                micro: 'microGap', tol: 'tolerance', norm: 'dayNormHours' }[id];
   const input = document.getElementById(id);
   input.value = opts[key];
   document.getElementById(id + 'V').textContent = opts[key];
@@ -359,19 +494,10 @@ function draw() {
 });
 
 document.getElementById('day').addEventListener('change', function (event) {
-  view = { from: Number(event.target.value), to: Number(event.target.value) + 86400 };
-  redraw();
+  goToDay(Number(event.target.value));
 });
-document.getElementById('prev').addEventListener('click', function () {
-  view = { from: view.from - 86400, to: view.to - 86400 };
-  document.getElementById('day').value = view.from;
-  redraw();
-});
-document.getElementById('next').addEventListener('click', function () {
-  view = { from: view.from + 86400, to: view.to + 86400 };
-  document.getElementById('day').value = view.from;
-  redraw();
-});
+document.getElementById('prev').addEventListener('click', function () { goToDay(view.from - 86400); });
+document.getElementById('next').addEventListener('click', function () { goToDay(view.from + 86400); });
 
 const WEEK_DAYS = 7;
 const WEEK_SLOT_MINUTES = 30;
@@ -398,7 +524,7 @@ function drawWeek() {
         (0.08 + 0.92 * value).toFixed(2) + '"></div>';
     }).join('');
     return '<div class="heat-day">' + shortDate(row.from) + '</div>' +
-           '<div class="heat-row">' + cells + '</div>';
+           '<div class="heat-row" data-from="' + row.from + '">' + cells + '</div>';
   }).join('') + '<div></div><div class="heat-axis">' + axis + '</div>';
 
   const perDay = rows.map(function (row) {
@@ -413,13 +539,20 @@ function drawWeek() {
     };
   });
 
-  const peak = Math.max.apply(null, perDay.map(function (d) { return d.screen; }).concat([1]));
+  // Scaled against the norm as well as the peak, so the chart answers "how much" and not only
+  // "which day was worst". Normalised to the peak alone, a week where the child doubled his
+  // screen time looked exactly like a disciplined one.
+  const norm = opts.dayNormHours * 3600;
+  const peak = Math.max.apply(null, perDay.map(function (d) { return d.screen; }).concat([norm, 1]));
+
   document.getElementById('bars').innerHTML = perDay.map(function (d) {
     return '<div class="bar' + (d.violations ? ' over' : '') + '" style="height:' +
       (100 * d.screen / peak) + '%" title="' + shortDate(d.from) + ' · ' +
       Render.fmtDuration(d.screen) +
       (d.violations ? ', нарушений: ' + d.violations : '') + '"></div>';
-  }).join('');
+  }).join('') +
+    '<div class="norm-line" style="bottom:' + (100 * norm / peak) + '%">' +
+    '<span class="norm-label">норма ' + Render.fmtDuration(norm) + '</span></div>';
   document.getElementById('barLabels').innerHTML = perDay.map(function (d) {
     return '<div class="bar-label">' + shortDate(d.from) + '</div>';
   }).join('');
@@ -427,7 +560,7 @@ function drawWeek() {
   // Bars are normalised to the tallest day, so the chart is unreadable in
   // absolute terms without naming what the full height stands for.
   document.getElementById('barsScale').textContent =
-    'высота столбика — доля от ' + Render.fmtDuration(peak);
+    'полная высота — ' + Render.fmtDuration(peak);
 
   const bad = perDay.filter(function (d) { return d.violations > 0; }).length;
   document.getElementById('weekKpis').innerHTML =
@@ -454,8 +587,45 @@ document.getElementById('mode').addEventListener('click', function () {
   redraw();
 });
 
+// Delegated from the container, because drawWeek rebuilds the rows on every repaint.
+function enableHeatBrush() {
+  const heat = document.getElementById('heat');
+  let anchor = null;
+  let anchorRow = null;
+
+  const timeIn = function (row, clientX) {
+    const rect = row.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return Number(row.dataset.from) + ratio * 86400;
+  };
+
+  heat.addEventListener('mousedown', function (event) {
+    const row = event.target.closest('.heat-row');
+    if (!row) return;
+    anchorRow = row;
+    anchor = timeIn(row, event.clientX);
+  });
+
+  document.addEventListener('mouseup', function (event) {
+    if (anchor === null) return;
+    // Dragging off the bottom of the grid clamps inside the row the drag started in, rather
+    // than throwing the selection away.
+    const row = (event.target.closest && event.target.closest('.heat-row')) || anchorRow;
+    const other = timeIn(row, event.clientX);
+    const from = Math.round(Math.min(anchor, other));
+    const to = Math.round(Math.max(anchor, other));
+    anchor = null;
+    anchorRow = null;
+    if (to - from >= 60) showSelection(from, to);
+    else clearSelection();
+  });
+}
+
 ['tPower', 'tActive', 'tGame', 'tRegime'].forEach(enableBrush);
+enableHeatBrush();
 fillDayPicker();
+document.getElementById('prev').disabled = view.from <= dayRange.first;
+document.getElementById('next').disabled = view.from >= dayRange.last;
 draw();
 </script>
 </body>

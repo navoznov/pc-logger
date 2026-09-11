@@ -209,6 +209,9 @@ public class BuildJsonTests : IDisposable
         Assert.Equal(15, defaults.GetProperty("break_minutes").GetInt32());
         Assert.Equal(15, defaults.GetProperty("session_minutes").GetInt32());
         Assert.Equal(2, defaults.GetProperty("tolerance").GetInt32());
+        // Not in the spec's threshold table: §8.3 asks the week chart for a norm line without
+        // saying what the norm is, so it is a threshold like the others and the parent sets it.
+        Assert.Equal(2, defaults.GetProperty("day_norm_hours").GetInt32());
     }
 
     [Fact]

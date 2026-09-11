@@ -49,7 +49,7 @@ public sealed class ReportBuilder
         {
             generated = nowTs,
             tz_offset_minutes = (int)TimeZoneInfo.Local.GetUtcOffset(DateTimeOffset.FromUnixTimeSeconds(nowTs)).TotalMinutes,
-            defaults = new { micro_gap = 3, break_minutes = 15, session_minutes = 15, tolerance = 2 },
+            defaults = new { micro_gap = 3, break_minutes = 15, session_minutes = 15, tolerance = 2, day_norm_hours = 2 },
             spans = SpanBuilder.BuildPresence(buckets, from, to, BucketSeconds)
                 .Select(x => new { t = x.T, d = x.D, s = x.S }),
             app_spans = SpanBuilder.BuildAppSpans(buckets, paths, BucketSeconds)
