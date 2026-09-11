@@ -9,6 +9,29 @@
     return hours + ' ч ' + String(minutes).padStart(2, '0') + ' м';
   }
 
+  // Every clock in the report is local wall time built by shifting the epoch and reading the
+  // UTC fields back: the browser's own zone is irrelevant, because the report can be opened on
+  // a machine that is not the one that recorded it.
+  function clock(ts, tzOffsetMinutes) {
+    return new Date((ts + tzOffsetMinutes * 60) * 1000).toISOString().slice(11, 16);
+  }
+
+  const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+  function weekday(ts, tzOffsetMinutes) {
+    return WEEKDAYS[new Date((ts + tzOffsetMinutes * 60) * 1000).getUTCDay()];
+  }
+
+  // What sits under a moment. Searched from the end, because items are painted in order and
+  // the one the cursor visibly points at is the last that covers it.
+  function itemAt(items, t) {
+    for (let i = (items || []).length - 1; i >= 0; i--) {
+      const item = items[i];
+      if (t >= item.t && t < item.t + item.d) return item;
+    }
+    return null;
+  }
+
   function layout(items, from, to) {
     const window = to - from;
     if (window <= 0) return [];
@@ -74,5 +97,6 @@
   }
 
   root.Render = { fmtDuration: fmtDuration, layout: layout,
-                  dayBounds: dayBounds, weekMatrix: weekMatrix };
+                  dayBounds: dayBounds, weekMatrix: weekMatrix,
+                  clock: clock, weekday: weekday, itemAt: itemAt };
 })(typeof module !== 'undefined' && module.exports ? module.exports : window);
