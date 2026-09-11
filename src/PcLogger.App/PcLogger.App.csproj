@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>PcLogger</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Lets the Windows-only app be built and published from macOS, so the exe can be
+         produced without a .NET SDK on the target machine. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PcLogger.Core\PcLogger.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The dashboard travels with the exe: Core's copy rule does not flow across a
+         ProjectReference, so the files are linked in here as well. -->
+    <None Include="..\PcLogger.Core\dashboard\**\*" Link="dashboard\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
