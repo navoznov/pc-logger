@@ -19,6 +19,7 @@
       --offhatch: rgba(255,255,255,.22); --rest-edge: #a49d88;
     }
   }
+  :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 20px 16px; background: var(--bg); color: var(--fg);
          font: 14px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; }
@@ -38,6 +39,7 @@
   .track-name { width: 96px; flex: none; color: var(--muted); font-size: 12px; text-align: right; }
   .track { position: relative; height: 22px; flex: 1; background: var(--offc);
            border-radius: 4px; overflow: hidden; }
+  .tracks, .heat { user-select: none; }
   .seg { position: absolute; top: 0; bottom: 0; }
   /* The regime verdict must not rely on hue alone: red/green is the most common
      colour-vision deficiency, and this track answers the report's whole question. */
@@ -101,9 +103,9 @@
 <div class="wrap">
   <header>
     <h1>PC Logger</h1>
-    <button id="prev">←</button>
-    <select id="day"></select>
-    <button id="next">→</button>
+    <button id="prev" title="Предыдущий день" aria-label="Предыдущий день">←</button>
+    <select id="day" title="Выбрать день" aria-label="Выбрать день"></select>
+    <button id="next" title="Следующий день" aria-label="Следующий день">→</button>
     <button id="mode">Неделя</button>
   </header>
 
@@ -201,8 +203,11 @@ function regimeIn(from, to) {
 
 function fillDayPicker() {
   const picker = document.getElementById('day');
-  const first = DATA.spans.length ? DATA.spans[0].t : DATA.generated;
   const last = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes).from;
+  // Falling back to `last` rather than DATA.generated guarantees at least one option: an empty
+  // database otherwise produced a picker with no options, no visible date, and — once the
+  // arrows learned to clamp against the picker — a crash on the first render.
+  const first = DATA.spans.length ? DATA.spans[0].t : last;
   picker.innerHTML = '';
   for (let d = last; d >= first; d -= 86400) {
     const option = document.createElement('option');
@@ -211,7 +216,10 @@ function fillDayPicker() {
       .toISOString().slice(0, 10);
     picker.appendChild(option);
   }
-  dayRange = { first: Number(picker.options[picker.options.length - 1].value), last: last };
+  dayRange = {
+    first: picker.options.length ? Number(picker.options[picker.options.length - 1].value) : last,
+    last: last
+  };
   picker.value = view.from;
 }
 
@@ -242,7 +250,10 @@ function paint(trackId, boxes, color) {
     div.style.left = box.left + '%';
     div.style.width = box.width + '%';
     div.style.backgroundColor = color(box.item);
-    div.title = Render.fmtDuration(box.item.d);
+    // The clipped length, and when it happened: an unclipped duration on a segment that the
+    // window cut in half is a number the user cannot reconcile with what they see.
+    div.title = clockOf(box.start) + '–' + clockOf(box.end) + ' · ' +
+                Render.fmtDuration(box.end - box.start);
     track.appendChild(div);
   });
 }
@@ -299,7 +310,10 @@ function drawAxis() {
 function drawKpis(blocks, gaps, stats) {
   const breaks = gaps.filter(function (g) { return g.kind === 'break'; })
     .map(function (g) { return g.d; }).sort(function (a, b) { return a - b; });
-  const median = breaks.length ? breaks[Math.floor(breaks.length / 2)] : 0;
+  const middle = Math.floor(breaks.length / 2);
+  const median = breaks.length === 0 ? 0
+    : breaks.length % 2 ? breaks[middle]
+    : (breaks[middle - 1] + breaks[middle]) / 2;
   const longest = blocks.reduce(function (max, b) { return Math.max(max, b.d); }, 0);
 
   const cards = [
@@ -434,7 +448,10 @@ function enableBrush(trackId) {
     return view.from + ratio * (view.to - view.from);
   };
 
-  track.addEventListener('mousedown', function (event) { anchor = toTime(event); });
+  track.addEventListener('mousedown', function (event) {
+    event.preventDefault();          // otherwise the drag selects the page text underneath
+    anchor = toTime(event);
+  });
   document.addEventListener('mouseup', function (event) {
     if (anchor === null) return;
     const other = toTime(event);
@@ -519,7 +536,8 @@ function drawWeek() {
       const minute = index * WEEK_SLOT_MINUTES;
       const clock = String(Math.floor(minute / 60)).padStart(2, '0') + ':' +
                     String(minute % 60).padStart(2, '0');
-      return '<div class="heat-cell" title="' + clock + ' · ' + Math.round(100 * value) +
+      return '<div class="heat-cell" title="' + shortDate(row.from) + ' ' + clock + ' · ' +
+        Math.round(100 * value) +
         ' %" style="background-color:var(--game-fg);opacity:' +
         (0.08 + 0.92 * value).toFixed(2) + '"></div>';
     }).join('');
@@ -602,6 +620,7 @@ function enableHeatBrush() {
   heat.addEventListener('mousedown', function (event) {
     const row = event.target.closest('.heat-row');
     if (!row) return;
+    event.preventDefault();
     anchorRow = row;
     anchor = timeIn(row, event.clientX);
   });

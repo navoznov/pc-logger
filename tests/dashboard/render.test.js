@@ -87,3 +87,11 @@ test('away and off time is not counted as activity', () => {
 
   assert.deepEqual(rows[0].slots.slice(0, 2), [0, 0]);
 });
+
+test('a laid out box carries the clipped bounds, not the item extent', () => {
+  const [box] = Render.layout([{ t: -50, d: 200 }], 0, 100);
+
+  assert.equal(box.start, 0);
+  assert.equal(box.end, 100);
+  assert.equal(box.item.t, -50);
+});

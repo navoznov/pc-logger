@@ -345,6 +345,52 @@ public class GameSpanTests
             Assert.Equal(spans[i - 1].T + spans[i - 1].D, spans[i].T);
     }
 
+    [Fact]
+    public void ClampsIntensityWhenAStoredBucketOverCounts()
+    {
+        // A database written before the sampler capped its counters: 15 seconds in a 10-second
+        // bucket. Unclamped this reaches the dashboard as a rect with a negative y.
+        var buckets = Enumerable.Range(0, 6)
+            .Select(i => new Bucket(600 + i * 10, 15, 0, null)).ToArray();
+
+        var intensity = SpanBuilder.BuildIntensity(buckets, 600, 660);
+
+        Assert.Equal(100, intensity.V[0]);
+    }
+
+    [Fact]
+    public void DoesNotNameAForegroundGameThatIsNotRunning()
+    {
+        // b.exe sits in a game folder and holds the foreground, but only a.exe has a run.
+        var paths = new Dictionary<long, string>
+        {
+            [1] = @"D:\Games\a\a.exe",
+            [2] = @"D:\Games\b\b.exe"
+        };
+        var runs = new[] { new AppRun(1, 1000, 1030) };
+        var buckets = new[] { new Bucket(1000, 5, 0, 2) };
+
+        var spans = SpanBuilder.BuildGameSpans(runs, buckets, paths, Folders, 1000, 1010);
+
+        Assert.Equal("bg", spans.Single().Lvl);
+        Assert.Equal("a.exe", spans.Single().App);
+    }
+
+    [Fact]
+    public void MergesAppSpansForNamesDifferingOnlyInCase()
+    {
+        var paths = new Dictionary<long, string>
+        {
+            [1] = @"D:\Games\x\Game.exe",
+            [2] = @"D:\Games\x\game.exe"
+        };
+        var buckets = new[] { new Bucket(1000, 5, 0, 1), new Bucket(1010, 5, 0, 2) };
+
+        var spans = SpanBuilder.BuildAppSpans(buckets, paths);
+
+        Assert.Equal(20, spans.Single().D);
+    }
+
     // Every other game-span test ends its window exactly at the run's Ended, so the Started
     // boundary was never walked past in either direction: widening it by one bucket left the
     // whole suite green while every game was drawn ten seconds early.

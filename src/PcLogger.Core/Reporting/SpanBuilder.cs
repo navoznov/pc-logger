@@ -58,7 +58,10 @@ public static class SpanBuilder
         foreach (var bucket in buckets.OrderBy(b => b.Ts))
         {
             var app = ResolveName(bucket, paths);
-            var contiguous = runApp is not null && bucket.Ts == runEnd && app == runApp;
+            // Case-insensitive because Windows paths are: two apps rows differing only in
+            // case denote the same executable and must not split one run into two spans.
+            var contiguous = runApp is not null && bucket.Ts == runEnd
+                             && string.Equals(app, runApp, StringComparison.OrdinalIgnoreCase);
 
             if (contiguous)
             {
@@ -117,9 +120,13 @@ public static class SpanBuilder
             values[index] = (values[index] ?? 0) + seconds;
         }
 
+        // Clamped because this is the last place a bad row can be stopped from becoming a bad
+        // pixel: a database written before the sampler capped its counters can still hold a
+        // bucket with more counted seconds than the bucket is long, and the dashboard draws
+        // the value straight into a rect height.
         for (var i = 0; i < minutes; i++)
             if (values[i] is { } seconds)
-                values[i] = (int)Math.Round(100.0 * seconds / Step);
+                values[i] = Math.Clamp((int)Math.Round(100.0 * seconds / Step), 0, 100);
 
         return new Intensity(start, Step, values);
     }
@@ -177,7 +184,22 @@ public static class SpanBuilder
             (string Lvl, string App)? slot = null;
             if (byTs.TryGetValue(ts, out var bucket) && covering is { } activeRun)
             {
-                var focused = bucket.FgAppId is { } fgId
+                // The foreground app has to be one of the games actually running, not merely
+                // an executable that sits in a game folder: without this the slot could be
+                // labelled with a game for which no run exists at all.
+                var fgRunning = false;
+                if (bucket.FgAppId is { } id)
+                {
+                    for (var i = 0; i < active.Count; i++)
+                    {
+                        if (active[i].AppId != id) continue;
+                        fgRunning = true;
+                        break;
+                    }
+                }
+
+                var focused = fgRunning
+                    && bucket.FgAppId is { } fgId
                     && paths.TryGetValue(fgId, out var fgPath)
                     && folders.IsGame(fgPath)
                         ? FileName(fgPath)

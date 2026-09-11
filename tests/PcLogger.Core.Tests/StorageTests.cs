@@ -223,6 +223,24 @@ public class AppStoreTests : IDisposable
         Assert.Single(new AppStore(db).AllPaths());
     }
 
+    // A restart lands inside the bucket the previous session already flushed. Replacing the row
+    // would throw away the seconds it had recorded and turn a bucket the child was present for
+    // into an empty one.
+    [Fact]
+    public void MergesRatherThanReplacesWhenTheSameBucketIsWrittenTwice()
+    {
+        using var db = new Db(_path);
+        var store = new BucketStore(db);
+
+        store.Write(new Bucket(1000, 8, 0, 7));
+        store.Write(new Bucket(1000, 0, 3, null));
+
+        var bucket = store.Read(1000, 1000).Single();
+        Assert.Equal(8, bucket.Active);
+        Assert.Equal(3, bucket.Pad);
+        Assert.Equal(7, bucket.FgAppId);
+    }
+
     // A run that ends before it starts covers no slot, so the reporting layer drops it
     // silently rather than drawing something odd. The corruption is invisible, which is
     // why the invariant is enforced in SQL at the only two places that write `ended`.

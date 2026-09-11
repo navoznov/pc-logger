@@ -13,7 +13,12 @@ public sealed class Win32SystemProbe : ISystemProbe
 {
     private const uint ProcessQueryLimitedInformation = 0x1000;
 
+    // Separate "have we sampled yet" flags rather than a 0 sentinel: 0 is a legal tick count
+    // (GetTickCount wraps every 49.7 days) and a legal packet number, so the sentinel would
+    // silently discard a real first reading — or accept a fake one.
+    private bool _haveInput;
     private uint _lastInputTick;
+    private readonly bool[] _havePad = new bool[4];
     private readonly uint[] _padPackets = new uint[4];
 
     public SystemSnapshot Sample()
@@ -28,8 +33,9 @@ public sealed class Win32SystemProbe : ISystemProbe
         var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
         if (!GetLastInputInfo(ref info)) return false;
 
-        var changed = _lastInputTick != 0 && info.dwTime != _lastInputTick;
+        var changed = _haveInput && info.dwTime != _lastInputTick;
         _lastInputTick = info.dwTime;
+        _haveInput = true;
         return changed;
     }
 
@@ -38,9 +44,18 @@ public sealed class Win32SystemProbe : ISystemProbe
         var changed = false;
         for (uint slot = 0; slot < 4; slot++)
         {
-            if (XInputGetState(slot, out var state) != 0) continue;
-            if (_padPackets[slot] != 0 && state.dwPacketNumber != _padPackets[slot]) changed = true;
+            if (XInputGetState(slot, out var state) != 0)
+            {
+                // An empty slot is not an error. Forgetting its packet number matters though:
+                // a pad unplugged and plugged back in restarts its counter, and comparing the
+                // new number against the stale one reads as input the child never made.
+                _havePad[slot] = false;
+                continue;
+            }
+
+            if (_havePad[slot] && state.dwPacketNumber != _padPackets[slot]) changed = true;
             _padPackets[slot] = state.dwPacketNumber;
+            _havePad[slot] = true;
         }
         return changed;
     }

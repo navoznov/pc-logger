@@ -3,7 +3,11 @@ using PcLogger.Core.Model;
 
 namespace PcLogger.Core.Storage;
 
-/// <summary>Reads and writes 10-second buckets. Writing the same ts twice replaces the row.</summary>
+/// <summary>
+/// Reads and writes 10-second buckets. Writing the same ts twice MERGES: a restart lands inside
+/// the bucket the previous session already flushed, and replacing would silently throw away the
+/// seconds it had recorded — turning a bucket the child was present for into an empty one.
+/// </summary>
 public sealed class BucketStore
 {
     private readonly Db _db;
@@ -17,9 +21,9 @@ public sealed class BucketStore
             INSERT INTO buckets(ts, active, pad, fg_app_id)
             VALUES ($ts, $active, $pad, $app)
             ON CONFLICT(ts) DO UPDATE SET
-              active = excluded.active,
-              pad = excluded.pad,
-              fg_app_id = excluded.fg_app_id;
+              active = MAX(active, excluded.active),
+              pad = MAX(pad, excluded.pad),
+              fg_app_id = COALESCE(excluded.fg_app_id, fg_app_id);
             """;
         cmd.Parameters.AddWithValue("$ts", bucket.Ts);
         cmd.Parameters.AddWithValue("$active", bucket.Active);

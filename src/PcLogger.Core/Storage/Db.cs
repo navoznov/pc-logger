@@ -19,6 +19,9 @@ public sealed class Db : IDisposable
         }.ToString());
         Connection.Open();
         Execute("PRAGMA journal_mode=WAL;");
+        // One commit per 10-second bucket is ~8,640 fsyncs a day for data where losing the
+        // last bucket to a power cut is harmless. NORMAL is the standard pairing with WAL.
+        Execute("PRAGMA synchronous=NORMAL;");
         Migrate();
     }
 

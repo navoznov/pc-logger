@@ -24,6 +24,10 @@
         return {
           left: ((box.start - from) / window) * 100,
           width: ((box.end - box.start) / window) * 100,
+          // The clipped bounds travel with the box: a caller that wants to label a segment
+          // needs the part that is actually on screen, not the item's full extent.
+          start: box.start,
+          end: box.end,
           item: box.item
         };
       });

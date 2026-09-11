@@ -12,8 +12,13 @@ internal static class Program
     {
         var exePath = Environment.ProcessPath!;
 
-        if (args.Contains("--install")) return ScheduledTaskInstaller.Install(exePath);
-        if (args.Contains("--uninstall")) return ScheduledTaskInstaller.Uninstall();
+        // Case-insensitive, because a Windows command line is: `--Install` typed by hand would
+        // otherwise start the tray app silently instead of registering anything.
+        var has = new Func<string, bool>(flag =>
+            args.Any(a => a.Equals(flag, StringComparison.OrdinalIgnoreCase)));
+
+        if (has("--install")) return ScheduledTaskInstaller.Install(exePath);
+        if (has("--uninstall")) return ScheduledTaskInstaller.Uninstall();
 
         using var single = new Mutex(true, @"Local\PcLoggerSingleInstance", out var acquired);
         if (!acquired) return 0;
