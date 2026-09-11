@@ -57,6 +57,10 @@ for (var day = 0; day < 7; day++)
     }
 
     apps.CloseRun(gameId, cursor);
+
+    // One day in the week the recorder fails, so the report has something to warn about.
+    if (day == 1) new EventStore(db).Write(dayStart - 3 * 3600, RecorderEventKind.Error,
+                                           "database or disk is full");
 }
 
 var config = new AppConfig(new[] { @"D:\Games" });

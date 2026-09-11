@@ -57,5 +57,14 @@
     return { blocks: blocks, gaps: gaps };
   }
 
-  root.Regime = { buildBlocks: buildBlocks };
+  // Splits a built timeline by day. A block belongs to the day it STARTS in, and is counted
+  // there once. Filtering the spans by day before building instead produced the same block on
+  // both days — a session from 23:40 to 00:20 was one 40-minute violation reported twice, each
+  // time beside a «Всего за ПК» that counted only that day's half of it.
+  function blocksIn(built, from, to) {
+    const within = function (item) { return item.t >= from && item.t < to; };
+    return { blocks: built.blocks.filter(within), gaps: built.gaps.filter(within) };
+  }
+
+  root.Regime = { buildBlocks: buildBlocks, blocksIn: blocksIn };
 })(typeof module !== 'undefined' && module.exports ? module.exports : window);

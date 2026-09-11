@@ -44,7 +44,10 @@
   .axis { display: flex; margin-left: 106px; color: var(--muted); font-size: 11px;
           border-top: 1px solid var(--line); padding-top: 4px; }
   .axis span { flex: 1; }
-  #intensity { display: block; width: 100%; height: 48px; margin-left: 0; }
+  /* Same 106px gutter as .axis: 96px label + 10px gap. The histogram claims to share the
+     tracks' clock, and starting it at the card edge stretched the same 24 hours over a wider
+     box — the same timestamp landed up to 106px, about 2.4 hours, to the left. */
+  #intensity { display: block; width: calc(100% - 106px); height: 48px; margin-left: 106px; }
   .panel { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
            padding: 14px; margin-bottom: 18px; }
   table { border-collapse: collapse; width: 100%; }
@@ -69,6 +72,8 @@
   .bar.over { background-color: var(--over); }
   .bar-labels { display: flex; gap: 6px; margin-top: 6px; }
   .bar-label { flex: 1; color: var(--muted); font-size: 11px; text-align: center; }
+  .warn { border-color: var(--over); }
+  .warn b { color: var(--over); }
   .hidden { display: none; }
 </style>
 </head>
@@ -90,6 +95,7 @@
   </div>
 
   <section id="dayView">
+    <div class="panel warn hidden" id="health"></div>
     <div class="kpis" id="kpis"></div>
 
     <div class="tracks">
@@ -154,6 +160,16 @@ const COLORS = { ok: 'var(--ok)', over: 'var(--over)', short: 'var(--short)',
 const SELECTION_PROMPT = 'Выдели участок на любой дорожке, чтобы увидеть статистику за период.';
 
 let view = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes);
+let regimeCache = null;
+
+// Built over the WHOLE history and only then split by day. Building it from day-filtered
+// spans made a session crossing midnight into the same block twice — once on each day, each
+// time with its full duration printed beside a half-day «Всего за ПК». A block belongs to the
+// day it starts in, and it is counted there once.
+function regimeIn(from, to) {
+  if (regimeCache === null) regimeCache = Regime.buildBlocks(DATA.spans, opts);
+  return Regime.blocksIn(regimeCache, from, to);
+}
 
 function fillDayPicker() {
   const picker = document.getElementById('day');
@@ -198,6 +214,26 @@ function drawIntensity() {
   }
   svg.setAttribute('viewBox', '0 0 100 100');
   svg.innerHTML = path;
+}
+
+// An absent bucket row means "the PC was not running", which is exactly what a healthy
+// evening away from the computer looks like. Without this the parent cannot tell the two
+// apart, and a broken recorder reads as perfect compliance.
+function drawHealth() {
+  const banner = document.getElementById('health');
+  const errors = (DATA.events || []).filter(function (e) {
+    return e.kind === 'error' && e.t >= view.from && e.t < view.to;
+  });
+
+  banner.classList.toggle('hidden', errors.length === 0);
+  if (errors.length === 0) return;
+
+  const time = function (ts) {
+    return new Date((ts + DATA.tz_offset_minutes * 60) * 1000).toISOString().slice(11, 16);
+  };
+  banner.innerHTML = '<b>Запись прерывалась в этот день.</b> Пробелы ниже могут означать не ' +
+    'отдых, а сбой сборщика.<br>' +
+    errors.map(function (e) { return time(e.t) + ' — ' + (e.detail || 'ошибка'); }).join('<br>');
 }
 
 function drawAxis() {
@@ -254,7 +290,7 @@ function showSelection(from, to) {
     '<table><tr><td>За ПК</td><td>' + Render.fmtDuration(stats.active) +
       '</td><td>' + stats.pct.active + ' %</td></tr>' +
     '<tr><td>Не за ПК</td><td>' + Render.fmtDuration(stats.away + stats.off) +
-      '</td><td>' + (stats.pct.away + stats.pct.off) + ' %</td></tr>' +
+      '</td><td>' + stats.pct.notAtPc + ' %</td></tr>' +
     '<tr><td>— отходил</td><td>' + Render.fmtDuration(stats.away) + '</td><td></td></tr>' +
     '<tr><td>— ПК был выключен</td><td>' + Render.fmtDuration(stats.off) + '</td><td></td></tr>' +
     '<tr><td>Игра в фокусе</td><td>' + Render.fmtDuration(stats.gameFg) +
@@ -290,7 +326,7 @@ function draw() {
   const spans = DATA.spans.filter(function (s) {
     return s.t + s.d > view.from && s.t < view.to;
   });
-  const result = Regime.buildBlocks(spans, opts);
+  const result = regimeIn(view.from, view.to);
 
   paint('tPower', Render.layout(spans.filter(function (s) { return s.s !== 'off'; }), view.from, view.to),
         function () { return 'var(--ok)'; });
@@ -301,6 +337,7 @@ function draw() {
   paint('tRegime', Render.layout(result.blocks.concat(result.gaps), view.from, view.to),
         function (item) { return COLORS[item.verdict || item.kind]; });
 
+  drawHealth();
   drawAxis();
   drawIntensity();
   drawKpis(result.blocks, result.gaps, Selection.stats(spans, DATA.game_spans, view.from, view.to));
@@ -315,6 +352,7 @@ function draw() {
   document.getElementById(id + 'V').textContent = opts[key];
   input.addEventListener('input', function () {
     opts[key] = Number(input.value);
+    regimeCache = null;
     document.getElementById(id + 'V').textContent = input.value;
     redraw();
   });
@@ -367,7 +405,7 @@ function drawWeek() {
     const spans = DATA.spans.filter(function (s) {
       return s.t + s.d > row.from && s.t < row.from + 86400;
     });
-    const result = Regime.buildBlocks(spans, opts);
+    const result = regimeIn(row.from, row.from + 86400);
     return {
       from: row.from,
       screen: Selection.stats(spans, [], row.from, row.from + 86400).active,

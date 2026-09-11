@@ -98,3 +98,34 @@ test('an empty selection reports zeroes rather than NaN', () => {
   assert.equal(s.pct.active, 0);
   assert.equal(s.ratio, null);
 });
+
+test('the two printed percentages add up to a hundred', () => {
+  // active 22.5 %, away+off 77.5 %: rounded independently these print 23 and 78.
+  const spans = [
+    { t: 0, d: 225, s: 'active' },
+    { t: 225, d: 387, s: 'away' },
+    { t: 612, d: 388, s: 'off' }
+  ];
+
+  const { pct } = Selection.stats(spans, [], 0, 1000);
+
+  assert.equal(pct.active + pct.notAtPc, 100);
+});
+
+test('game time in focus never exceeds time spent at the pc', () => {
+  // the game holds the foreground for the whole window, but the child is there for a third
+  const spans = [{ t: 0, d: 100, s: 'active' }, { t: 100, d: 200, s: 'away' }];
+  const gameSpans = [{ t: 0, d: 300, lvl: 'fg', app: 'game.exe' }];
+
+  const stats = Selection.stats(spans, gameSpans, 0, 300);
+
+  assert.equal(stats.gameFg, 100);
+  assert.ok(stats.gameFg <= stats.active);
+});
+
+test('game time in focus is clipped to the selection window', () => {
+  const spans = [{ t: 0, d: 300, s: 'active' }];
+  const gameSpans = [{ t: 0, d: 300, lvl: 'fg', app: 'game.exe' }];
+
+  assert.equal(Selection.stats(spans, gameSpans, 100, 200).gameFg, 100);
+});

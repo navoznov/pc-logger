@@ -114,3 +114,35 @@ test('leading and trailing inactivity produce no blocks of their own', () => {
   assert.equal(blocks.length, 1);
   assert.equal(blocks[0].t, 60 * MIN);
 });
+
+// The composition the dashboard actually performs: build once over the whole history, then
+// split by day. Testing buildBlocks on a single pre-filtered day proves nothing about this.
+test('a session crossing midnight is one block, counted on the day it started', () => {
+  const midnight = 86400;
+  const spans = [{ t: midnight - 20 * 60, d: 40 * 60, s: 'active' }];
+  const built = Regime.buildBlocks(spans, Object.assign({}, OPTS, { sessionMinutes: 25, tolerance: 0 }));
+
+  const before = Regime.blocksIn(built, 0, midnight);
+  const after = Regime.blocksIn(built, midnight, 2 * midnight);
+
+  assert.equal(before.blocks.length, 1);
+  assert.equal(before.blocks[0].d, 40 * 60);
+  assert.equal(before.blocks[0].verdict, 'over');
+  assert.equal(after.blocks.length, 0);
+});
+
+test('splitting by day keeps every block exactly once', () => {
+  const spans = [
+    { t: 0, d: 600, s: 'active' },
+    { t: 86400 - 600, d: 600, s: 'active' },
+    { t: 2 * 86400, d: 600, s: 'active' }
+  ];
+  const built = Regime.buildBlocks(spans, OPTS);
+
+  const perDay = [0, 1, 2].map(function (d) {
+    return Regime.blocksIn(built, d * 86400, (d + 1) * 86400).blocks.length;
+  });
+
+  assert.deepEqual(perDay, [2, 0, 1]);
+  assert.equal(perDay.reduce(function (a, b) { return a + b; }, 0), built.blocks.length);
+});
