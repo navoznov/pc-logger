@@ -28,6 +28,13 @@ public sealed class ReportBuilder
 
     public string BuildJson(long nowTs, int historyDays = 90)
     {
+        // BucketStore.Read is inclusive on both ends, but SpanBuilder's presence and
+        // game-span walks are half-open [from, to): a bucket stored at exactly `to`
+        // would reach app_spans (which iterates buckets directly) but never spans or
+        // game_spans (which walk the grid). That mismatch is unreachable today only
+        // because `to` is rounded to a boundary past nowTs and the collector never
+        // writes buckets for the future — a different caller passing an unrounded `to`
+        // could resurrect it.
         var from = nowTs - (long)historyDays * 86_400;
         from -= from % BucketSeconds;
         var to = nowTs - nowTs % BucketSeconds + BucketSeconds;

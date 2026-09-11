@@ -44,6 +44,45 @@ public class AppConfigTests : IDisposable
 
         Assert.Empty(config.GameFolders);
     }
+
+    [Fact]
+    public void FallsBackToEmptyListWhenGameFoldersKeyIsAbsent()
+    {
+        File.WriteAllText(_path, "{}");
+
+        var config = AppConfig.Load(_path);
+
+        Assert.Empty(config.GameFolders);
+    }
+
+    [Fact]
+    public void FallsBackToEmptyListWhenGameFoldersIsNull()
+    {
+        File.WriteAllText(_path, """{"game_folders": null}""");
+
+        var config = AppConfig.Load(_path);
+
+        Assert.Empty(config.GameFolders);
+    }
+
+    [Fact]
+    public void FallsBackToEmptyListWhenConfigDirectoryCannotBeCreated()
+    {
+        // A file where a directory is expected makes Directory.CreateDirectory fail on both
+        // macOS and Windows — a portable stand-in for an unwritable config location.
+        var blocker = Path.Combine(Path.GetTempPath(), $"pclog-{Guid.NewGuid():N}");
+        File.WriteAllText(blocker, "not a directory");
+        try
+        {
+            var config = AppConfig.Load(Path.Combine(blocker, "config.json"));
+
+            Assert.Empty(config.GameFolders);
+        }
+        finally
+        {
+            File.Delete(blocker);
+        }
+    }
 }
 
 public class RenderTests
@@ -163,6 +202,27 @@ public class BuildJsonTests : IDisposable
         using (var db = new Db(_path))
         {
             new BucketStore(db).Write(new Bucket(nowTs - nowTs % 10, 10, 0, null));
+        }
+
+        var spans = Build(nowTs, historyDays: 1).GetProperty("spans");
+
+        var states = spans.EnumerateArray().Select(s => s.GetProperty("s").GetString());
+        Assert.Contains("active", states);
+    }
+
+    [Fact]
+    public void RoundsTheWindowToIncludeTheInProgressBucket()
+    {
+        // nowTs sits exactly on a bucket boundary, and a bucket is stored at that exact
+        // timestamp — the bucket currently being filled when the report is generated.
+        // BuildJson rounds `to` one bucket past nowTs specifically so this bucket, which
+        // falls exactly on the otherwise-exclusive upper bound, is still walked. Without
+        // the "+ BucketSeconds" the half-open [from, to) walk would stop short of it.
+        const long nowTs = 1_000_000;
+
+        using (var db = new Db(_path))
+        {
+            new BucketStore(db).Write(new Bucket(nowTs, 10, 0, null));
         }
 
         var spans = Build(nowTs, historyDays: 1).GetProperty("spans");

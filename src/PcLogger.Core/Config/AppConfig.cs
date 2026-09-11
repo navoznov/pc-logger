@@ -15,23 +15,30 @@ public sealed record AppConfig(
 
     public static AppConfig Load(string path)
     {
-        if (!File.Exists(path))
-        {
-            var empty = new AppConfig(Array.Empty<string>());
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-            File.WriteAllText(path, JsonSerializer.Serialize(empty, Options));
-            return empty;
-        }
-
         try
         {
-            return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path))
-                ?? new AppConfig(Array.Empty<string>());
+            if (!File.Exists(path))
+            {
+                var empty = new AppConfig(Array.Empty<string>());
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+                File.WriteAllText(path, JsonSerializer.Serialize(empty, Options));
+                return empty;
+            }
+
+            // "{}" and {"game_folders": null} both parse successfully and leave the
+            // array null, so a null check is needed on top of the JsonException catch.
+            var loaded = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path));
+            if (loaded?.GameFolders is { } folders) return new AppConfig(folders);
         }
-        catch (JsonException)
+        catch (Exception e) when (
+            e is JsonException or IOException or UnauthorizedAccessException
+              or ArgumentException or NotSupportedException)
         {
-            // A broken config must not stop the report from being built.
-            return new AppConfig(Array.Empty<string>());
+            // Neither a broken config nor an unwritable directory may stop the report.
+            // Game folders only colour a context track; the presence data underneath is
+            // the answer the user actually came for, and it must never be lost to a typo.
         }
+
+        return new AppConfig(Array.Empty<string>());
     }
 }
