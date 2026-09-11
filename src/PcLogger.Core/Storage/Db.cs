@@ -18,6 +18,21 @@ public sealed class Db : IDisposable
             Mode = SqliteOpenMode.ReadWriteCreate
         }.ToString());
         Connection.Open();
+        try
+        {
+            Open();
+        }
+        catch
+        {
+            // Otherwise a failed migration leaks the connection and its WAL sidecars, and the
+            // next attempt on the same path finds the file locked by this process.
+            Connection.Dispose();
+            throw;
+        }
+    }
+
+    private void Open()
+    {
         Execute("PRAGMA journal_mode=WAL;");
         // One commit per 10-second bucket is ~8,640 fsyncs a day for data where losing the
         // last bucket to a power cut is harmless. NORMAL is the standard pairing with WAL.
@@ -55,7 +70,25 @@ public sealed class Db : IDisposable
             );
             CREATE INDEX IF NOT EXISTS ix_events_ts ON events(ts);
             """);
+        // A database written by a NEWER build may contain columns and rows this code does not
+        // understand; opening it read-write would quietly corrupt them. Reading the version is
+        // the only thing that makes storing it worth anything.
+        if (StoredVersion() is { } stored && stored > SchemaVersion)
+        {
+            throw new InvalidOperationException(
+                $"database schema v{stored} is newer than this build understands (v{SchemaVersion})");
+        }
+
         Execute($"INSERT OR REPLACE INTO meta(key, value) VALUES('schema_version', '{SchemaVersion}');");
+    }
+
+    private int? StoredVersion()
+    {
+        using var cmd = Connection.CreateCommand();
+        cmd.CommandText = "SELECT value FROM meta WHERE key = 'schema_version';";
+        return cmd.ExecuteScalar() is string text && int.TryParse(text, out var version)
+            ? version
+            : null;
     }
 
     public void Execute(string sql)

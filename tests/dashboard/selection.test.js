@@ -129,3 +129,15 @@ test('game time in focus is clipped to the selection window', () => {
 
   assert.equal(Selection.stats(spans, gameSpans, 100, 200).gameFg, 100);
 });
+
+test('a zero-length span contributes nothing', () => {
+  const spans = [{ t: 500, d: 0, s: 'active' }, { t: 0, d: 1000, s: 'away' }];
+
+  assert.equal(Selection.stats(spans, [], 0, 1000).active, 0);
+});
+
+test('a span touching the window only at its edge contributes nothing', () => {
+  const spans = [{ t: 900, d: 100, s: 'active' }];
+
+  assert.equal(Selection.stats(spans, [], 1000, 2000).active, 0);
+});

@@ -57,6 +57,22 @@ public class SamplerTests
         Assert.Equal(@"D:\a.exe", sampler.Tick(1010, Idle)!.Value.FgPath);
     }
 
+    // Would catch a dropped _foreground.Clear(): without it the first bucket's app keeps
+    // accumulating and wins the second bucket too.
+    [Fact]
+    public void KeepsConsecutiveBucketsIsolatedFromEachOther()
+    {
+        var sampler = new Sampler();
+        for (var t = 1000L; t < 1010L; t++) sampler.Tick(t, Typing(@"D:\a.exe"));
+        sampler.Tick(1010, Typing(@"D:\b.exe"));
+        for (var t = 1011L; t < 1020L; t++) sampler.Tick(t, Typing(@"D:\b.exe"));
+
+        var second = sampler.Tick(1020, Idle)!.Value;
+
+        Assert.Equal(@"D:\b.exe", second.FgPath);
+        Assert.Equal(10, second.Active);
+    }
+
     [Fact]
     public void CapsCountedSecondsAtTheBucketSizeWhenTheClockStepsBack()
     {

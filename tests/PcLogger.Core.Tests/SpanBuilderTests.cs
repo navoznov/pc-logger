@@ -345,6 +345,36 @@ public class GameSpanTests
             Assert.Equal(spans[i - 1].T + spans[i - 1].D, spans[i].T);
     }
 
+    // The whole point of a span list is that a state change is a boundary: two neighbours
+    // sharing a state means a merge was missed and every consumer counts one block too many.
+    [Fact]
+    public void NeverEmitsTwoAdjacentSpansWithTheSameState()
+    {
+        var buckets = new[]
+        {
+            new Bucket(1000, 5, 0, null), new Bucket(1010, 3, 0, null),
+            new Bucket(1020, 0, 0, null), new Bucket(1030, 0, 2, null),
+            new Bucket(1050, 4, 0, null)
+        };
+
+        var spans = SpanBuilder.BuildPresence(buckets, 1000, 1060);
+
+        for (var i = 1; i < spans.Count; i++) Assert.NotEqual(spans[i - 1].S, spans[i].S);
+    }
+
+    // null and 0 mean different things: null is "no bucket, the recorder was not running",
+    // 0 is "a bucket exists and there was no input in it".
+    [Fact]
+    public void DistinguishesAMinuteWithNoBucketFromAMinuteWithNoActivity()
+    {
+        var buckets = Enumerable.Range(0, 6).Select(i => new Bucket(600 + i * 10, 0, 0, null)).ToArray();
+
+        var intensity = SpanBuilder.BuildIntensity(buckets, 600, 720);
+
+        Assert.Equal(0, intensity.V[0]);
+        Assert.Null(intensity.V[1]);
+    }
+
     [Fact]
     public void ClampsIntensityWhenAStoredBucketOverCounts()
     {

@@ -17,7 +17,11 @@ public static class SpanBuilder
     public static IReadOnlyList<PresenceSpan> BuildPresence(
         IReadOnlyList<Bucket> buckets, long fromTs, long toTs, int bucketSeconds = 10)
     {
-        var byTs = buckets.ToDictionary(b => b.Ts);
+        // Indexer assignment rather than ToDictionary: a duplicate Ts is unreachable through
+        // BucketStore.Read (ts is the primary key) but would throw on a hand-assembled list,
+        // and last-write-wins is a saner answer than a crash inside a report build.
+        var byTs = new Dictionary<long, Bucket>();
+        foreach (var b in buckets) byTs[b.Ts] = b;
         var spans = new List<PresenceSpan>();
 
         string? runState = null;
@@ -147,7 +151,11 @@ public static class SpanBuilder
 
         if (gameRuns.Length == 0) return Array.Empty<GameSpan>();
 
-        var byTs = buckets.ToDictionary(b => b.Ts);
+        // Indexer assignment rather than ToDictionary: a duplicate Ts is unreachable through
+        // BucketStore.Read (ts is the primary key) but would throw on a hand-assembled list,
+        // and last-write-wins is a saner answer than a crash inside a report build.
+        var byTs = new Dictionary<long, Bucket>();
+        foreach (var b in buckets) byTs[b.Ts] = b;
         var spans = new List<GameSpan>();
 
         (string Lvl, string App)? run = null;
