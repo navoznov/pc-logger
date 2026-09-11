@@ -345,25 +345,57 @@ public class GameSpanTests
             Assert.Equal(spans[i - 1].T + spans[i - 1].D, spans[i].T);
     }
 
+    // A slot with no bucket row means the recorder was not running, so there is no evidence
+    // about anything — including whether the game was up. Claiming otherwise would make the
+    // two fact tracks of one payload contradict each other at the same instant: the presence
+    // track says "PC off" while the game track draws a solid bar underneath it.
     [Fact]
-    public void CoversSlotsWithNoBucketWhileTheGameKeepsRunning()
+    public void DrawsNoGameForSlotsThatHaveNoBucket()
     {
         var runs = new[] { new AppRun(1, 1000, 1030) };
 
         var spans = SpanBuilder.BuildGameSpans(runs, Array.Empty<Bucket>(), Paths, Folders, 1000, 1030);
 
-        Assert.Single(spans);
-        Assert.Equal("bg", spans[0].Lvl);
+        Assert.Empty(spans);
     }
 
     [Fact]
-    public void TreatsAnOpenEndedRunAsStillRunning()
+    public void StopsDrawingAnOpenRunOnceTheBucketsStop()
+    {
+        // The ordinary case: the PC is slept with a game open. The recorder survives sleep, so
+        // no Stop() runs and the row stays open, but no buckets are written for the night.
+        var runs = new[] { new AppRun(1, 1000, null) };
+        var buckets = new[] { new Bucket(1000, 5, 0, null), new Bucket(1010, 5, 0, null) };
+
+        var spans = SpanBuilder.BuildGameSpans(runs, buckets, Paths, Folders, 1000, 3600);
+
+        Assert.Equal(1000, spans.Single().T);
+        Assert.Equal(20, spans.Single().D);
+    }
+
+    [Fact]
+    public void TreatsAnOpenEndedRunAsStillRunningWhileBucketsKeepArriving()
     {
         var runs = new[] { new AppRun(1, 1000, null) };
+        var buckets = Enumerable.Range(0, 3).Select(i => new Bucket(1000 + i * 10, 5, 0, null)).ToArray();
 
-        var spans = SpanBuilder.BuildGameSpans(runs, Array.Empty<Bucket>(), Paths, Folders, 1000, 1030);
+        var spans = SpanBuilder.BuildGameSpans(runs, buckets, Paths, Folders, 1000, 1030);
 
         Assert.Equal(30, spans[0].D);
+    }
+
+    [Fact]
+    public void SplitsAGameSpanAroundAGapWithNoBuckets()
+    {
+        var runs = new[] { new AppRun(1, 1000, 3630) };
+        var buckets = new[] { new Bucket(1000, 5, 0, null), new Bucket(1010, 5, 0, null),
+                              new Bucket(3600, 5, 0, null), new Bucket(3610, 5, 0, null) };
+
+        var spans = SpanBuilder.BuildGameSpans(runs, buckets, Paths, Folders, 1000, 3630);
+
+        Assert.Equal(2, spans.Count);
+        Assert.Equal((1000, 20), (spans[0].T, spans[0].D));
+        Assert.Equal((3600, 20), (spans[1].T, spans[1].D));
     }
 
     [Fact]

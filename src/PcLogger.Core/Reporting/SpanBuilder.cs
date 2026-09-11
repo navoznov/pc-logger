@@ -158,11 +158,15 @@ public static class SpanBuilder
                 }
             }
 
+            // A slot with no bucket row means the recorder was not running there, so there is
+            // no evidence about anything in it — including whether the game was up. Drawing a
+            // game across such a slot makes the payload contradict itself: the presence track
+            // says the PC was off while the game track draws a solid bar underneath it. The
+            // ordinary way in is sleeping the PC with a game open, which closes no run.
             (string Lvl, string App)? slot = null;
-            if (covering is { } activeRun)
+            if (byTs.TryGetValue(ts, out var bucket) && covering is { } activeRun)
             {
-                var focused = byTs.TryGetValue(ts, out var bucket)
-                    && bucket.FgAppId is { } fgId
+                var focused = bucket.FgAppId is { } fgId
                     && paths.TryGetValue(fgId, out var fgPath)
                     && folders.IsGame(fgPath)
                         ? FileName(fgPath)

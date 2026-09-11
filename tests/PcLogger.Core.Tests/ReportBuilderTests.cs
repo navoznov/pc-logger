@@ -138,8 +138,66 @@ public class BuildJsonTests : IDisposable
     {
         var root = Build(86_400);
 
-        foreach (var key in new[] { "generated", "tz_offset_minutes", "defaults", "spans", "app_spans", "game_spans", "intensity" })
+        foreach (var key in new[] { "generated", "tz_offset_minutes", "defaults", "spans", "app_spans", "game_spans", "intensity", "events" })
             Assert.True(root.TryGetProperty(key, out _), $"missing key: {key}");
+    }
+
+    // The browser reads this payload by field name and never validates it: a renamed field
+    // does not fail, it silently blanks a track or shifts an axis. Nothing else in the suite
+    // pins these names, so five separate one-token edits used to leave 100 % of tests green
+    // while the dashboard rendered empty. Every name below is read by dashboard.template.html.
+    [Fact]
+    public void PinsEveryFieldNameAndShapeTheDashboardReadsInsideTheArrays()
+    {
+        using (var db = new Db(_path))
+        {
+            var buckets = new BucketStore(db);
+            var apps = new AppStore(db);
+            var gameId = apps.GetOrCreateAppId(@"D:\Games\x\game.exe");
+            apps.OpenRun(gameId, 500_000);
+            apps.CloseRun(gameId, 500_030);
+            for (var i = 0; i < 3; i++) buckets.Write(new Bucket(500_000 + i * 10, 10, 0, gameId));
+            new EventStore(db).Write(500_000, RecorderEventKind.Error, "disk full");
+        }
+
+        var root = Build(500_030);
+
+        var span = root.GetProperty("spans").EnumerateArray().First();
+        Assert.Equal(JsonValueKind.Number, span.GetProperty("t").ValueKind);
+        Assert.Equal(JsonValueKind.Number, span.GetProperty("d").ValueKind);
+        Assert.Contains(span.GetProperty("s").GetString(), new[] { "active", "away", "off" });
+
+        var appSpan = root.GetProperty("app_spans").EnumerateArray().First();
+        Assert.Equal(JsonValueKind.Number, appSpan.GetProperty("t").ValueKind);
+        Assert.Equal(JsonValueKind.Number, appSpan.GetProperty("d").ValueKind);
+        Assert.Equal("game.exe", appSpan.GetProperty("app").GetString());
+
+        var gameSpan = root.GetProperty("game_spans").EnumerateArray().First();
+        Assert.Equal(JsonValueKind.Number, gameSpan.GetProperty("t").ValueKind);
+        Assert.Equal(JsonValueKind.Number, gameSpan.GetProperty("d").ValueKind);
+        Assert.Contains(gameSpan.GetProperty("lvl").GetString(), new[] { "fg", "bg" });
+        Assert.Equal("game.exe", gameSpan.GetProperty("app").GetString());
+
+        var intensity = root.GetProperty("intensity");
+        Assert.Equal(60, intensity.GetProperty("step").GetInt32());
+        Assert.Equal(JsonValueKind.Array, intensity.GetProperty("v").ValueKind);
+        // The dashboard derives an array index as (view.from - t0) / step and rounds it, so a
+        // t0 that is not minute-aligned shifts the whole histogram by up to half a minute.
+        Assert.Equal(0, intensity.GetProperty("t0").GetInt64() % 60);
+
+        var evt = root.GetProperty("events").EnumerateArray().First();
+        Assert.Equal(500_000, evt.GetProperty("t").GetInt64());
+        Assert.Equal("error", evt.GetProperty("kind").GetString());
+        Assert.Equal("disk full", evt.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public void ReportsTheLocalOffsetSoTheDashboardCanDrawLocalDays()
+    {
+        var expected = (int)TimeZoneInfo.Local
+            .GetUtcOffset(DateTimeOffset.FromUnixTimeSeconds(500_030)).TotalMinutes;
+
+        Assert.Equal(expected, Build(500_030).GetProperty("tz_offset_minutes").GetInt32());
     }
 
     [Fact]

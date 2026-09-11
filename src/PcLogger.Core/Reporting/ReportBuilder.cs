@@ -56,7 +56,11 @@ public sealed class ReportBuilder
                 .Select(x => new { t = x.T, d = x.D, app = x.App }),
             game_spans = SpanBuilder.BuildGameSpans(runs, buckets, paths, folders, from, to, BucketSeconds)
                 .Select(x => new { t = x.T, d = x.D, lvl = x.Lvl, app = x.App }),
-            intensity = SpanBuilder.BuildIntensity(buckets, from, to)
+            intensity = SpanBuilder.BuildIntensity(buckets, from, to),
+            // Without these the dashboard cannot tell a quiet evening from a dead recorder:
+            // both are simply an absence of buckets.
+            events = new EventStore(_db).Read(from, to)
+                .Select(x => new { t = x.Ts, kind = x.Kind, detail = x.Detail })
         };
 
         return JsonSerializer.Serialize(payload, Json);
