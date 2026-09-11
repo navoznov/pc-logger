@@ -19,6 +19,15 @@
       --offhatch: rgba(255,255,255,.22); --rest-edge: #a49d88;
     }
   }
+  /* The same palette again, and deliberately: a rule inside a media query cannot be shared
+     with one outside it, and this is what lets the theme button force dark on a machine whose
+     system preference is light. Edit both blocks together. */
+  :root[data-theme="dark"] {
+    --bg: #1a1a18; --fg: #eceae4; --muted: #9a978f; --line: #34332f;
+    --card: #232320; --ok: #6fbd88; --over: #e0776a; --short: #e8bb60;
+    --rest: #57533f; --offc: #2f2e2a; --game-fg: #7a9fd5; --game-bg: #47597a;
+    --offhatch: rgba(255,255,255,.22); --rest-edge: #a49d88;
+  }
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 20px 16px; background: var(--bg); color: var(--fg);
@@ -26,6 +35,9 @@
   .wrap { max-width: 1100px; margin: 0 auto; }
   header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
   h1 { font-size: 18px; margin: 0 12px 0 0; font-weight: 600; }
+  /* Pushed to the far end of the header: it switches the look of the page, not the data on
+     it, and standing next to «Неделя» it read as another way to change what is shown. */
+  #theme { margin-left: auto; }
   button, select { background: var(--card); color: var(--fg); border: 1px solid var(--line);
                    border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
   .kpis { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
@@ -54,6 +66,25 @@
      without wrecking the palette. So a break is marked by shape as well as colour — the same
      answer already used for превышение, and what 1.4.11 actually asks for: not colour alone. */
   .seg.brk { box-shadow: inset 0 0 0 1px var(--rest-edge); }
+  .tracks-body { position: relative; }
+  /* One overlay over the lane the tracks, the axis and the histogram all share. The 106px
+     gutter is the label column, so anything positioned in here is a percentage of the day
+     rather than of the card, and survives a window resize without being redrawn. */
+  .lane { position: absolute; left: 106px; right: 0; top: 0; bottom: 0; pointer-events: none; }
+  .grid-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+  .cursor-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--fg);
+                 opacity: .55; }
+  .sel-band { position: absolute; top: 0; bottom: 0; background: var(--fg); opacity: .12;
+              border-left: 1px solid var(--fg); border-right: 1px solid var(--fg); }
+  .tip { position: fixed; z-index: 10; pointer-events: none; max-width: 290px;
+         background: var(--card); color: var(--fg); border: 1px solid var(--line);
+         border-radius: 6px; padding: 6px 9px; font-size: 12px; line-height: 1.4;
+         box-shadow: 0 3px 10px rgba(0,0,0,.22); }
+  .tip b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .tip .dim { color: var(--muted); }
+  tr.pick { cursor: pointer; }
+  tr.pick:hover td { background: var(--bg); }
+  .heat-row, .bar { cursor: pointer; }
   .axis { display: flex; margin-left: 106px; color: var(--muted); font-size: 11px;
           border-top: 1px solid var(--line); padding-top: 4px; }
   .axis span { flex: 1; min-width: 0; }
@@ -106,38 +137,47 @@
     <button id="prev" title="Предыдущий день" aria-label="Предыдущий день">←</button>
     <select id="day" title="Выбрать день" aria-label="Выбрать день"></select>
     <button id="next" title="Следующий день" aria-label="Следующий день">→</button>
-    <button id="mode">Неделя</button>
+    <button id="mode" title="Переключить между лентой одного дня и сводкой за семь дней">Неделя</button>
+    <button id="theme" title="Светлая или тёмная тема. По умолчанию отчёт следует настройке системы.">Тема</button>
   </header>
 
   <div class="sliders">
-    <label>Блок, мин <input type="range" id="session" min="5" max="60" step="5"><b id="sessionV"></b></label>
-    <label>Перерыв, мин <input type="range" id="break" min="5" max="60" step="5"><b id="breakV"></b></label>
-    <label>Микропауза, мин <input type="range" id="micro" min="1" max="10" step="1"><b id="microV"></b></label>
-    <label>Допуск, мин <input type="range" id="tol" min="0" max="10" step="1"><b id="tolV"></b></label>
-    <label>Норма в день, ч <input type="range" id="norm" min="1" max="8" step="1"><b id="normV"></b></label>
+    <label title="Сколько минут подряд за ПК считается нормальным блоком. Блок длиннее этого порога плюс допуска помечается превышением.">Блок, мин <input type="range" id="session" min="5" max="60" step="5"><b id="sessionV"></b></label>
+    <label title="Пауза такой длины и больше закрывает блок и засчитывается как полноценный перерыв.">Перерыв, мин <input type="range" id="break" min="5" max="60" step="5"><b id="breakV"></b></label>
+    <label title="Пауза короче этой поглощается блоком: отойти налить чай — не перерыв, а часть работы за ПК.">Микропауза, мин <input type="range" id="micro" min="1" max="10" step="1"><b id="microV"></b></label>
+    <label title="Сколько минут сверх блока прощается, прежде чем вердикт станет «превышение».">Допуск, мин <input type="range" id="tol" min="0" max="10" step="1"><b id="tolV"></b></label>
+    <label title="Дневная норма экранного времени. Рисуется пунктиром на столбиках недели, на вердикт по блокам не влияет.">Норма в день, ч <input type="range" id="norm" min="1" max="8" step="1"><b id="normV"></b></label>
+    <button id="resetOpts" title="Вернуть все пять порогов к значениям по умолчанию">Сбросить пороги</button>
   </div>
 
-  <div class="panel" id="selection">Выдели участок на дорожке или на строке недели, чтобы увидеть статистику за период.</div>
+  <div class="panel" id="selection" title="Числа считаются от полной длины выделения и не зависят от слайдеров порогов">Выдели участок на дорожке или на строке недели, чтобы увидеть статистику за период.</div>
 
   <section id="dayView">
     <div class="panel warn hidden" id="health"></div>
+    <div class="panel hidden" id="empty"></div>
     <div class="kpis" id="kpis"></div>
 
     <div class="tracks">
-      <div class="track-row"><div class="track-name">ПК включён</div><div class="track" id="tPower"></div></div>
-      <div class="track-row"><div class="track-name">Активность</div><div class="track" id="tActive"></div></div>
-      <div class="track-row"><div class="track-name">Игра</div><div class="track" id="tGame"></div></div>
-      <div class="track-row"><div class="track-name">Режим</div><div class="track" id="tRegime"></div></div>
-      <div class="axis" id="axis"></div>
-      <svg id="intensity" preserveAspectRatio="none"></svg>
+      <div class="tracks-body" id="tracksBody">
+        <div class="track-row"><div class="track-name" title="Были ли вообще записи. Пусто означает, что компьютер был выключен или спал, а не что за ним никого не было.">ПК включён</div><div class="track" id="tPower"></div></div>
+        <div class="track-row"><div class="track-name" title="Был ли ввод с клавиатуры, мыши или геймпада. Отсутствие ввода при включённом ПК читается как «отошёл».">Активность</div><div class="track" id="tActive"></div></div>
+        <div class="track-row"><div class="track-name" title="Игра из папок в config.json: в фокусе или запущена в фоне. На вердикт по режиму не влияет никогда.">Игра</div><div class="track" id="tGame"></div></div>
+        <div class="track-row"><div class="track-name" title="Единственная дорожка-интерпретация: блоки, перерывы и вердикт. Перекрашивается слайдерами порогов.">Режим</div><div class="track" id="tRegime"></div></div>
+        <div class="axis" id="axis"></div>
+        <svg id="intensity" preserveAspectRatio="none"></svg>
+        <div class="lane" id="lane"></div>
+      </div>
+      <!-- Outside the lane overlay on purpose: the hour grid would otherwise be drawn
+           straight through this line of text. -->
+      <div class="bars-scale">интенсивность ввода — доля секунд с вводом в минуте</div>
       <div class="legend">
-        <span><i class="dot" style="background:var(--ok)"></i>в пределах нормы</span>
-        <span><i class="dot" style="background:var(--over)"></i>превышение</span>
-        <span><i class="dot" style="background:var(--short)"></i>недостаточный перерыв</span>
-        <span><i class="dot rest-dot"></i>перерыв</span>
-        <span><i class="dot off-dot"></i>ПК выключен</span>
-        <span><i class="dot" style="background:var(--game-fg)"></i>игра в фокусе</span>
-        <span><i class="dot" style="background:var(--game-bg)"></i>игра в фоне</span>
+        <span title="Блок за ПК не длиннее порога «блок» плюс допуска"><i class="dot" style="background:var(--ok)"></i>в пределах нормы</span>
+        <span title="Блок за ПК длиннее порога: помечен и цветом, и штриховкой"><i class="dot" style="background:var(--over)"></i>превышение</span>
+        <span title="Пауза длиннее микропаузы, но короче порога перерыва: блок не закрывает"><i class="dot" style="background:var(--short)"></i>недостаточный перерыв</span>
+        <span title="Пауза не короче порога перерыва: блок закрыт, отдых засчитан"><i class="dot rest-dot"></i>перерыв</span>
+        <span title="Записей нет: компьютер был выключен или спал"><i class="dot off-dot"></i>ПК выключен</span>
+        <span title="Окно игры было на переднем плане"><i class="dot" style="background:var(--game-fg)"></i>игра в фокусе</span>
+        <span title="Игра запущена, но в фокусе было другое окно"><i class="dot" style="background:var(--game-bg)"></i>игра в фоне</span>
       </div>
     </div>
 
@@ -145,7 +185,14 @@
 
     <div class="panel scroll-x">
       <table>
-        <thead><tr><th>Начало</th><th>Длительность</th><th>Экранное время</th><th>Перерыв после</th><th>Топ-приложение</th><th>Вердикт</th></tr></thead>
+        <thead><tr>
+          <th title="Когда начался блок">Начало</th>
+          <th title="От начала блока до его конца, вместе с поглощёнными паузами">Длительность</th>
+          <th title="Только минуты с вводом внутри блока: длительность минус паузы">Экранное время</th>
+          <th title="Пауза сразу после блока. Прочерк означает, что блок последний за день.">Перерыв после</th>
+          <th title="Приложение, продержавшее фокус дольше всех внутри блока">Топ-приложение</th>
+          <th title="«Превышение», если блок длиннее порога «блок» плюс допуска">Вердикт</th>
+        </tr></thead>
         <tbody id="blocks"></tbody>
       </table>
     </div>
@@ -191,6 +238,9 @@ let view = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes);
 let regimeCache = null;
 let selected = null;
 let dayRange = { first: 0, last: 0 };
+// The moment a drag started on, shared by the four tracks and by the cursor readout, which
+// has to know whether it is reporting a point in time or a range being dragged out.
+let brush = null;
 
 // Built over the WHOLE history and only then split by day. Building it from day-filtered
 // spans made a session crossing midnight into the same block twice — once on each day, each
@@ -213,7 +263,7 @@ function fillDayPicker() {
     const option = document.createElement('option');
     option.value = d;
     option.textContent = new Date((d + DATA.tz_offset_minutes * 60) * 1000)
-      .toISOString().slice(0, 10);
+      .toISOString().slice(0, 10) + ', ' + Render.weekday(d, DATA.tz_offset_minutes);
     picker.appendChild(option);
   }
   dayRange = {
@@ -241,21 +291,178 @@ function segClass(item) {
   return item.verdict === 'over' ? 'seg over' : 'seg';
 }
 
+// What each track currently shows, in paint order and already clipped to the day: an
+// unclipped duration on a segment the window cut in half is a number the user cannot
+// reconcile with what they see.
+const painted = { tPower: [], tActive: [], tGame: [], tRegime: [] };
+
 function paint(trackId, boxes, color) {
   const track = document.getElementById(trackId);
   track.innerHTML = '';
+  painted[trackId] = boxes.map(function (box) {
+    return { t: box.start, d: box.end - box.start, item: box.item };
+  });
   boxes.forEach(function (box) {
     const div = document.createElement('div');
     div.className = segClass(box.item);
     div.style.left = box.left + '%';
     div.style.width = box.width + '%';
     div.style.backgroundColor = color(box.item);
-    // The clipped length, and when it happened: an unclipped duration on a segment that the
-    // window cut in half is a number the user cannot reconcile with what they see.
-    div.title = clockOf(box.start) + '–' + clockOf(box.end) + ' · ' +
-                Render.fmtDuration(box.end - box.start);
     track.appendChild(div);
   });
+}
+
+// The four tracks and the histogram share one clock, so the moment under the cursor is
+// answered once for all of them: a line down every lane and one floating label. Without the
+// line the label states a time the eye cannot transfer to the track above or below it, which
+// is the whole reason to hover a timeline.
+
+const TRACK_NAMES = { tPower: 'ПК включён', tActive: 'Активность',
+                      tGame: 'Игра', tRegime: 'Режим' };
+
+const NOTHING_AT = { tPower: 'ПК был выключен или спал', tActive: 'ввода не было',
+                     tGame: 'игра не запущена', tRegime: 'данных нет' };
+
+function intensityAt(t) {
+  const index = Math.floor((t - DATA.intensity.t0) / DATA.intensity.step);
+  const value = DATA.intensity.v[index];
+  return value == null ? 0 : value;
+}
+
+// Plain strings, written into the tooltip with textContent: `app` is the one string in this
+// report that comes from the child's machine rather than from our own code.
+function describeAt(zoneId, hit, t) {
+  if (zoneId === 'intensity') {
+    return { what: 'Интенсивность ввода — ' + intensityAt(t) + ' %' };
+  }
+
+  const name = TRACK_NAMES[zoneId];
+  // Today's lane runs to midnight while the data stops at the moment the report was built,
+  // and «ПК был выключен» about eight o'clock tonight is a claim the report cannot make.
+  if (!hit) {
+    return { what: name + ' · ' +
+      (t >= DATA.generated ? 'это время ещё не наступило' : NOTHING_AT[zoneId]) };
+  }
+
+  const when = clockOf(hit.t) + '–' + clockOf(hit.t + hit.d) + ' · ' +
+               Render.fmtDuration(hit.d);
+  const item = hit.item;
+  let what;
+
+  if (zoneId === 'tPower') what = item.s === 'away' ? 'отошёл, ввода не было' : 'был ввод';
+  else if (zoneId === 'tActive') what = 'был ввод';
+  else if (zoneId === 'tGame') what = item.app + (item.lvl === 'fg' ? ' — в фокусе' : ' — в фоне');
+  else if (item.s === 'off') what = 'ПК выключен';
+  else if (item.kind === 'break') what = 'полноценный перерыв';
+  else if (item.kind === 'short') what = 'недостаточный перерыв';
+  else what = item.verdict === 'over' ? 'блок за ПК — превышение' : 'блок за ПК — в пределах нормы';
+
+  return { what: name + ' · ' + what, when: when };
+}
+
+// Built once: the hour grid and the selection band are percentages of the day, so they survive
+// both a repaint and a window resize without being recomputed.
+function buildLane() {
+  const lane = document.getElementById('lane');
+  lane.innerHTML = '';
+  for (let hour = 3; hour < 24; hour += 3) {
+    const line = document.createElement('div');
+    line.className = 'grid-line';
+    line.style.left = (100 * hour / 24) + '%';
+    lane.appendChild(line);
+  }
+  ['selBand sel-band', 'cursorLine cursor-line'].forEach(function (pair) {
+    const parts = pair.split(' ');
+    const div = document.createElement('div');
+    div.id = parts[0];
+    div.className = parts[1] + ' hidden';
+    lane.appendChild(div);
+  });
+}
+
+// Also called when the day view leaves the screen: hiding the tracks fires no mouseleave, so
+// without this the readout hangs over the week view, naming a moment on a lane that is gone.
+function hideCursor() {
+  document.getElementById('tip').classList.add('hidden');
+  document.getElementById('cursorLine').classList.add('hidden');
+}
+
+function showBand(from, to) {
+  const band = document.getElementById('selBand');
+  const window = view.to - view.from;
+  const left = Math.max(0, Math.min(1, (from - view.from) / window));
+  const right = Math.max(0, Math.min(1, (to - view.from) / window));
+  band.classList.toggle('hidden', right <= left);
+  band.style.left = (100 * left) + '%';
+  band.style.width = (100 * (right - left)) + '%';
+}
+
+function hideBand() {
+  document.getElementById('selBand').classList.add('hidden');
+}
+
+function enableCursorReadout() {
+  const body = document.getElementById('tracksBody');
+  const tip = document.createElement('div');
+  tip.id = 'tip';
+  tip.className = 'tip hidden';
+  tip.setAttribute('aria-hidden', 'true');   // mouse-only by nature; the tables carry the same
+  document.body.appendChild(tip);            // numbers for a reader who is not using one
+
+  const place = function (event) {
+    // Flipped to the other side of the cursor near the window edge, where a tooltip that
+    // always opens right and down is drawn half outside the screen.
+    const box = tip.getBoundingClientRect();
+    const right = event.clientX + 16 + box.width > window.innerWidth;
+    const below = event.clientY + 20 + box.height > window.innerHeight;
+    tip.style.left = (right ? event.clientX - 16 - box.width : event.clientX + 16) + 'px';
+    tip.style.top = (below ? event.clientY - 20 - box.height : event.clientY + 20) + 'px';
+  };
+
+  body.addEventListener('mousemove', function (event) {
+    const track = event.target.closest('.track');
+    const zone = track || event.target.closest('#intensity');
+    if (!zone) return hideCursor();
+
+    const rect = zone.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const t = Math.round(view.from + ratio * (view.to - view.from));
+    const zoneId = track ? track.id : 'intensity';
+
+    const line = document.getElementById('cursorLine');
+    line.style.left = (100 * ratio) + '%';
+    line.classList.remove('hidden');
+
+    tip.innerHTML = '';
+    const clock = document.createElement('b');
+    // While the button is down the question is no longer "when is this" but "what have I
+    // selected so far" — dragging a range blind and learning its bounds only on release is
+    // the one thing the brush got wrong.
+    clock.textContent = brush === null ? clockOf(t)
+      : clockOf(Math.min(brush, t)) + ' – ' + clockOf(Math.max(brush, t)) +
+        ' · ' + Render.fmtDuration(Math.abs(t - brush));
+    tip.appendChild(clock);
+
+    if (brush === null) {
+      const hit = Render.itemAt(painted[zoneId] || [], t);
+      const said = describeAt(zoneId, hit, t);
+      tip.appendChild(document.createTextNode(said.what));
+      if (said.when) {
+        const dim = document.createElement('div');
+        dim.className = 'dim';
+        dim.textContent = said.when;
+        tip.appendChild(dim);
+      }
+    } else {
+      showBand(Math.min(brush, t), Math.max(brush, t));
+      tip.appendChild(document.createTextNode('отпустите кнопку, чтобы посчитать период'));
+    }
+
+    tip.classList.remove('hidden');
+    place(event);
+  });
+
+  body.addEventListener('mouseleave', hideCursor);
 }
 
 function drawIntensity() {
@@ -287,12 +494,17 @@ function drawHealth() {
   banner.classList.toggle('hidden', errors.length === 0);
   if (errors.length === 0) return;
 
-  const time = function (ts) {
-    return new Date((ts + DATA.tz_offset_minutes * 60) * 1000).toISOString().slice(11, 16);
-  };
   banner.innerHTML = '<b>Запись прерывалась в этот день.</b> Пробелы ниже могут означать не ' +
     'отдых, а сбой сборщика.<br>' +
-    errors.map(function (e) { return time(e.t) + ' — ' + (e.detail || 'ошибка'); }).join('<br>');
+    errors.map(function (e) { return clockOf(e.t) + ' — ' + (e.detail || 'ошибка'); }).join('<br>');
+}
+
+function drawEmpty(spans) {
+  const note = document.getElementById('empty');
+  const recorded = spans.some(function (s) { return s.s !== 'off'; });
+  note.classList.toggle('hidden', recorded);
+  note.textContent = 'За этот день записей нет: компьютер не включали или программа не ' +
+    'работала. Пустые дорожки ниже не означают, что за ПК никого не было.';
 }
 
 function drawAxis() {
@@ -317,15 +529,21 @@ function drawKpis(blocks, gaps, stats) {
   const longest = blocks.reduce(function (max, b) { return Math.max(max, b.d); }, 0);
 
   const cards = [
-    ['Всего за ПК', Render.fmtDuration(stats.active)],
-    ['Блоков', String(blocks.length)],
-    ['Нарушений', String(blocks.filter(function (b) { return b.verdict === 'over'; }).length)],
-    ['Самый длинный блок', Render.fmtDuration(longest)],
-    ['Медиана перерыва', Render.fmtDuration(median)]
+    ['Всего за ПК', Render.fmtDuration(stats.active),
+     'Сумма времени с вводом за день. Минуты, когда ПК был включён, но ввода не было, сюда не входят.'],
+    ['Блоков', String(blocks.length),
+     'Сколько раз за день начинался блок за ПК. Блок закрывается только полноценным перерывом.'],
+    ['Нарушений', String(blocks.filter(function (b) { return b.verdict === 'over'; }).length),
+     'Блоки длиннее порога «блок» плюс допуска.'],
+    ['Самый длинный блок', Render.fmtDuration(longest),
+     'От начала до конца самого долгого блока, вместе с поглощёнными микропаузами.'],
+    ['Медиана перерыва', Render.fmtDuration(median),
+     'Середина списка полноценных перерывов за день: половина была короче, половина длиннее. ' +
+     'Устойчивее среднего — один шестичасовой сон не делает день образцовым.']
   ];
 
   document.getElementById('kpis').innerHTML = cards.map(function (card) {
-    return '<div class="kpi"><div class="label">' + card[0] +
+    return '<div class="kpi" title="' + card[2] + '"><div class="label">' + card[0] +
            '</div><div class="value">' + card[1] + '</div></div>';
   }).join('');
 }
@@ -342,7 +560,7 @@ function topBy(spans, from, to, keep) {
 }
 
 function clockOf(ts) {
-  return new Date((ts + DATA.tz_offset_minutes * 60) * 1000).toISOString().slice(11, 16);
+  return Render.clock(ts, DATA.tz_offset_minutes);
 }
 
 // Built through the DOM rather than by concatenating innerHTML, because `app` is the first
@@ -361,6 +579,11 @@ function drawBlocksTable(blocks, gaps) {
     apps.forEach(function (value, app) { if (value > best) { best = value; top = app; } });
 
     const row = document.createElement('tr');
+    row.className = 'pick';
+    row.title = 'Нажмите, чтобы посмотреть статистику за этот блок';
+    row.addEventListener('click', function () {
+      showSelection(block.t, block.t + block.d);
+    });
     [clockOf(block.t), Render.fmtDuration(block.d), Render.fmtDuration(block.screen),
      after ? Render.fmtDuration(after.d) : '—', top || '—'].forEach(function (text) {
       const td = document.createElement('td');
@@ -410,6 +633,7 @@ function drawGamesOfDay() {
 
 function clearSelection() {
   selected = null;
+  hideBand();
   document.getElementById('selection').innerHTML = SELECTION_PROMPT;
 }
 
@@ -420,11 +644,9 @@ function clearSelection() {
 function showSelection(from, to) {
   selected = { from: from, to: to };
   const stats = Selection.stats(DATA.spans, DATA.game_spans, from, to);
-  const time = function (ts) {
-    return new Date((ts + DATA.tz_offset_minutes * 60) * 1000).toISOString().slice(11, 16);
-  };
+  showBand(from, to);
   document.getElementById('selection').innerHTML =
-    '<b>Выделено: ' + time(from) + ' – ' + time(to) + '</b> · ' +
+    '<b>Выделено: ' + clockOf(from) + ' – ' + clockOf(to) + '</b> · ' +
     Render.fmtDuration(stats.total) +
     '<table><tr><td>За ПК</td><td>' + Render.fmtDuration(stats.active) +
       '</td><td>' + stats.pct.active + ' %</td></tr>' +
@@ -440,7 +662,6 @@ function showSelection(from, to) {
 
 function enableBrush(trackId) {
   const track = document.getElementById(trackId);
-  let anchor = null;
 
   const toTime = function (event) {
     const rect = track.getBoundingClientRect();
@@ -450,14 +671,14 @@ function enableBrush(trackId) {
 
   track.addEventListener('mousedown', function (event) {
     event.preventDefault();          // otherwise the drag selects the page text underneath
-    anchor = toTime(event);
+    brush = toTime(event);
   });
   document.addEventListener('mouseup', function (event) {
-    if (anchor === null) return;
+    if (brush === null) return;
     const other = toTime(event);
-    const from = Math.round(Math.min(anchor, other));
-    const to = Math.round(Math.max(anchor, other));
-    anchor = null;
+    const from = Math.round(Math.min(brush, other));
+    const to = Math.round(Math.max(brush, other));
+    brush = null;
     if (to - from >= 60) showSelection(from, to);
     else clearSelection();   // a plain click means "never mind", not "keep the old numbers
   });
@@ -489,6 +710,7 @@ function draw() {
         function (item) { return item.s === 'off' ? 'var(--offc)' : COLORS[item.verdict || item.kind]; });
 
   drawHealth();
+  drawEmpty(spans);
   drawAxis();
   drawIntensity();
   drawKpis(result.blocks, result.gaps, Selection.stats(spans, DATA.game_spans, view.from, view.to));
@@ -496,31 +718,79 @@ function draw() {
   drawGamesOfDay();
 }
 
-['session', 'break', 'micro', 'tol', 'norm'].forEach(function (id) {
-  const key = { session: 'sessionMinutes', break: 'breakMinutes',
-                micro: 'microGap', tol: 'tolerance', norm: 'dayNormHours' }[id];
+const SLIDERS = {
+  session: { opt: 'sessionMinutes', fallback: 'session_minutes' },
+  break: { opt: 'breakMinutes', fallback: 'break_minutes' },
+  micro: { opt: 'microGap', fallback: 'micro_gap' },
+  tol: { opt: 'tolerance', fallback: 'tolerance' },
+  norm: { opt: 'dayNormHours', fallback: 'day_norm_hours' }
+};
+
+function applySlider(id, value) {
   const input = document.getElementById(id);
-  input.value = opts[key];
-  document.getElementById(id + 'V').textContent = opts[key];
-  input.addEventListener('input', function () {
-    opts[key] = Number(input.value);
+  input.value = value;
+  opts[SLIDERS[id].opt] = Number(input.value);
+  document.getElementById(id + 'V').textContent = input.value;
+}
+
+Object.keys(SLIDERS).forEach(function (id) {
+  applySlider(id, opts[SLIDERS[id].opt]);
+  document.getElementById(id).addEventListener('input', function () {
+    applySlider(id, this.value);
     regimeCache = null;
-    document.getElementById(id + 'V').textContent = input.value;
     redraw();
   });
+});
+
+// Five thresholds are easy to lose and impossible to remember: without this the only way back
+// to the numbers the report was built with is to rebuild the report.
+document.getElementById('resetOpts').addEventListener('click', function () {
+  Object.keys(SLIDERS).forEach(function (id) {
+    applySlider(id, DATA.defaults[SLIDERS[id].fallback]);
+  });
+  regimeCache = null;
+  redraw();
 });
 
 document.getElementById('day').addEventListener('change', function (event) {
   goToDay(Number(event.target.value));
 });
-document.getElementById('prev').addEventListener('click', function () { goToDay(view.from - 86400); });
-document.getElementById('next').addEventListener('click', function () { goToDay(view.from + 86400); });
+
+// In the week view the window is seven days wide, so a step of one day slides it by a seventh
+// and shows almost the same week again.
+function navStep() {
+  return weekShown() ? WEEK_DAYS * 86400 : 86400;
+}
+
+document.getElementById('prev').addEventListener('click', function () { goToDay(view.from - navStep()); });
+document.getElementById('next').addEventListener('click', function () { goToDay(view.from + navStep()); });
+
+document.addEventListener('keydown', function (event) {
+  // The sliders and the date picker own the arrows while they have focus, and moving a
+  // threshold and the day at once is nobody's intention.
+  const tag = (event.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+  if (event.key === 'ArrowLeft') goToDay(view.from - navStep());
+  else if (event.key === 'ArrowRight') goToDay(view.from + navStep());
+  else return;
+  event.preventDefault();
+});
+
+document.getElementById('theme').addEventListener('click', function () {
+  const root = document.documentElement;
+  const dark = root.getAttribute('data-theme') === 'dark' ||
+    (!root.getAttribute('data-theme') &&
+     window.matchMedia('(prefers-color-scheme: dark)').matches);
+  root.setAttribute('data-theme', dark ? 'light' : 'dark');
+});
 
 const WEEK_DAYS = 7;
 const WEEK_SLOT_MINUTES = 30;
 
-function shortDate(ts) {
-  return new Date((ts + DATA.tz_offset_minutes * 60) * 1000).toISOString().slice(5, 10);
+// «09-11 чт»: a parent remembers that the row was a Thursday long before its date.
+function dayLabel(ts) {
+  return new Date((ts + DATA.tz_offset_minutes * 60) * 1000).toISOString().slice(5, 10) +
+         ' ' + Render.weekday(ts, DATA.tz_offset_minutes);
 }
 
 function drawWeek() {
@@ -536,12 +806,12 @@ function drawWeek() {
       const minute = index * WEEK_SLOT_MINUTES;
       const clock = String(Math.floor(minute / 60)).padStart(2, '0') + ':' +
                     String(minute % 60).padStart(2, '0');
-      return '<div class="heat-cell" title="' + shortDate(row.from) + ' ' + clock + ' · ' +
+      return '<div class="heat-cell" title="' + dayLabel(row.from) + ' ' + clock + ' · ' +
         Math.round(100 * value) +
-        ' %" style="background-color:var(--game-fg);opacity:' +
+        ' % · нажмите, чтобы открыть этот день" style="background-color:var(--game-fg);opacity:' +
         (0.08 + 0.92 * value).toFixed(2) + '"></div>';
     }).join('');
-    return '<div class="heat-day">' + shortDate(row.from) + '</div>' +
+    return '<div class="heat-day">' + dayLabel(row.from) + '</div>' +
            '<div class="heat-row" data-from="' + row.from + '">' + cells + '</div>';
   }).join('') + '<div></div><div class="heat-axis">' + axis + '</div>';
 
@@ -564,15 +834,16 @@ function drawWeek() {
   const peak = Math.max.apply(null, perDay.map(function (d) { return d.screen; }).concat([norm, 1]));
 
   document.getElementById('bars').innerHTML = perDay.map(function (d) {
-    return '<div class="bar' + (d.violations ? ' over' : '') + '" style="height:' +
-      (100 * d.screen / peak) + '%" title="' + shortDate(d.from) + ' · ' +
+    return '<div class="bar' + (d.violations ? ' over' : '') + '" data-from="' + d.from +
+      '" style="height:' + (100 * d.screen / peak) + '%" title="' + dayLabel(d.from) + ' · ' +
       Render.fmtDuration(d.screen) +
-      (d.violations ? ', нарушений: ' + d.violations : '') + '"></div>';
+      (d.violations ? ', нарушений: ' + d.violations : '') +
+      ' · нажмите, чтобы открыть этот день"></div>';
   }).join('') +
     '<div class="norm-line" style="bottom:' + (100 * norm / peak) + '%">' +
     '<span class="norm-label">норма ' + Render.fmtDuration(norm) + '</span></div>';
   document.getElementById('barLabels').innerHTML = perDay.map(function (d) {
-    return '<div class="bar-label">' + shortDate(d.from) + '</div>';
+    return '<div class="bar-label">' + dayLabel(d.from) + '</div>';
   }).join('');
 
   // Bars are normalised to the tallest day, so the chart is unreadable in
@@ -582,9 +853,11 @@ function drawWeek() {
 
   const bad = perDay.filter(function (d) { return d.violations > 0; }).length;
   document.getElementById('weekKpis').innerHTML =
-    '<div class="kpi"><div class="label">Дней с нарушениями</div><div class="value">' +
+    '<div class="kpi" title="Дни, в которых был хотя бы один блок длиннее порога «блок» плюс ' +
+    'допуска"><div class="label">Дней с нарушениями</div><div class="value">' +
     bad + ' из ' + perDay.length + '</div></div>' +
-    '<div class="kpi"><div class="label">Всего за неделю</div><div class="value">' +
+    '<div class="kpi" title="Сумма экранного времени за семь дней, которые показаны выше">' +
+    '<div class="label">Всего за неделю</div><div class="value">' +
     Render.fmtDuration(perDay.reduce(function (a, d) { return a + d.screen; }, 0)) +
     '</div></div>';
 }
@@ -596,14 +869,36 @@ function redraw() {
   else drawWeek();
 }
 
-document.getElementById('mode').addEventListener('click', function () {
-  const week = document.getElementById('weekView');
-  const showWeek = week.classList.contains('hidden');
-  week.classList.toggle('hidden', !showWeek);
+function weekShown() {
+  return !document.getElementById('weekView').classList.contains('hidden');
+}
+
+// Toggles the view without drawing it: the two callers repaint for different reasons, and
+// switching to a day only to repaint the week it came from is a wasted pass over the history.
+function applyMode(showWeek) {
+  hideCursor();
+  document.getElementById('weekView').classList.toggle('hidden', !showWeek);
   document.getElementById('dayView').classList.toggle('hidden', showWeek);
-  this.textContent = showWeek ? 'День' : 'Неделя';
+  document.getElementById('mode').textContent = showWeek ? 'День' : 'Неделя';
+  const prev = document.getElementById('prev');
+  const next = document.getElementById('next');
+  prev.title = showWeek ? 'Предыдущая неделя' : 'Предыдущий день';
+  next.title = showWeek ? 'Следующая неделя' : 'Следующий день';
+  prev.setAttribute('aria-label', prev.title);
+  next.setAttribute('aria-label', next.title);
+}
+
+document.getElementById('mode').addEventListener('click', function () {
+  applyMode(!weekShown());
   redraw();
 });
+
+// The week view used to be a dead end: it shows which day went wrong and left the reader to
+// find that date in the picker by hand.
+function showDay(from) {
+  applyMode(false);
+  goToDay(from);
+}
 
 // Delegated from the container, because drawWeek rebuilds the rows on every repaint.
 function enableHeatBrush() {
@@ -636,12 +931,20 @@ function enableHeatBrush() {
     anchor = null;
     anchorRow = null;
     if (to - from >= 60) showSelection(from, to);
-    else clearSelection();
+    else showDay(Number(row.dataset.from));   // a click, not a drag: open the day it points at
+  });
+
+  document.getElementById('bars').addEventListener('click', function (event) {
+    const bar = event.target.closest('.bar');
+    if (bar) showDay(Number(bar.dataset.from));
   });
 }
 
 ['tPower', 'tActive', 'tGame', 'tRegime'].forEach(enableBrush);
 enableHeatBrush();
+buildLane();
+enableCursorReadout();
+applyMode(false);
 fillDayPicker();
 document.getElementById('prev').disabled = view.from <= dayRange.first;
 document.getElementById('next').disabled = view.from >= dayRange.last;

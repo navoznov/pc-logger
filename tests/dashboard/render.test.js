@@ -95,3 +95,47 @@ test('a laid out box carries the clipped bounds, not the item extent', () => {
   assert.equal(box.end, 100);
   assert.equal(box.item.t, -50);
 });
+
+test('the clock prints local hours and minutes', () => {
+  assert.equal(Render.clock(1757656020, 180), '08:47');
+  assert.equal(Render.clock(1757606400, 180), '19:00');
+  assert.equal(Render.clock(0, 0), '00:00');
+});
+
+test('the clock follows the offset across a day boundary', () => {
+  assert.equal(Render.clock(1757606400, -300), '11:00');
+});
+
+test('the weekday is the local one, in short Russian', () => {
+  assert.equal(Render.weekday(1757606400, 180), 'чт');
+  assert.equal(Render.weekday(1757606400 + 86400, 180), 'пт');
+});
+
+test('a moment inside an item finds it', () => {
+  const item = { t: 100, d: 50 };
+
+  assert.equal(Render.itemAt([item], 120), item);
+  assert.equal(Render.itemAt([item], 100), item);
+});
+
+test('an item ends before its last second, so the next one owns the boundary', () => {
+  const first = { t: 0, d: 100 };
+  const second = { t: 100, d: 100 };
+
+  assert.equal(Render.itemAt([first, second], 100), second);
+});
+
+test('a moment outside every item finds nothing', () => {
+  assert.equal(Render.itemAt([{ t: 100, d: 50 }], 99), null);
+  assert.equal(Render.itemAt([{ t: 100, d: 50 }], 150), null);
+  assert.equal(Render.itemAt([], 0), null);
+});
+
+// Segments are absolutely positioned in paint order, so the one the cursor visibly sits on
+// is the last that covers the moment — not the first.
+test('overlapping items resolve to the one painted last', () => {
+  const under = { t: 0, d: 100, lvl: 'bg' };
+  const over = { t: 20, d: 10, lvl: 'fg' };
+
+  assert.equal(Render.itemAt([under, over], 25), over);
+});
