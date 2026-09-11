@@ -1,3 +1,4 @@
+using PcLogger.Core.Config;
 using PcLogger.Core.Model;
 using PcLogger.Core.Reporting;
 using Xunit;
@@ -248,5 +249,132 @@ public class IntensityTests
         var intensity = SpanBuilder.BuildIntensity(buckets, 3600, 3660);
 
         Assert.Equal(new int?[] { null }, intensity.V);
+    }
+}
+
+public class GameSpanTests
+{
+    private static readonly Dictionary<long, string> Paths = new()
+    {
+        [1] = @"D:\Games\deeprock\game.exe",
+        [2] = @"C:\Program Files\Chrome\chrome.exe",
+        [3] = @"D:\Games\terraria\terraria.exe"
+    };
+
+    private static readonly GameFolders Folders = new(new[] { @"D:\Games" });
+
+    [Fact]
+    public void RunningButUnfocusedGameIsBackground()
+    {
+        var runs = new[] { new AppRun(1, 1000, 1020) };
+        var buckets = new[] { new Bucket(1000, 5, 0, 2), new Bucket(1010, 5, 0, 2) };
+
+        var spans = SpanBuilder.BuildGameSpans(runs, buckets, Paths, Folders, 1000, 1020);
+
+        Assert.Single(spans);
+        Assert.Equal(new GameSpan(1000, 20, "bg", "game.exe"), spans[0]);
+    }
+
+    [Fact]
+    public void FocusedGameIsForeground()
+    {
+        var runs = new[] { new AppRun(1, 1000, 1020) };
+        var buckets = new[] { new Bucket(1000, 5, 0, 1), new Bucket(1010, 5, 0, 1) };
+
+        var spans = SpanBuilder.BuildGameSpans(runs, buckets, Paths, Folders, 1000, 1020);
+
+        Assert.Single(spans);
+        Assert.Equal("fg", spans[0].Lvl);
+    }
+
+    [Fact]
+    public void SplitsWhenFocusEntersAndLeavesTheGame()
+    {
+        var runs = new[] { new AppRun(1, 1000, 1030) };
+        var buckets = new[]
+        {
+            new Bucket(1000, 5, 0, 2),
+            new Bucket(1010, 5, 0, 1),
+            new Bucket(1020, 5, 0, 2)
+        };
+
+        var spans = SpanBuilder.BuildGameSpans(runs, buckets, Paths, Folders, 1000, 1030);
+
+        Assert.Equal(new[] { "bg", "fg", "bg" }, spans.Select(s => s.Lvl));
+    }
+
+    [Fact]
+    public void ProducesNothingWhenNoGameIsRunning()
+    {
+        var runs = new[] { new AppRun(2, 1000, 1020) };
+        var buckets = new[] { new Bucket(1000, 5, 0, 2) };
+
+        Assert.Empty(SpanBuilder.BuildGameSpans(runs, buckets, Paths, Folders, 1000, 1020));
+    }
+
+    [Fact]
+    public void IgnoresRunsWhosePathIsUnknown()
+    {
+        var runs = new[] { new AppRun(999, 1000, 1020) };
+        var buckets = new[] { new Bucket(1000, 5, 0, null) };
+
+        Assert.Empty(SpanBuilder.BuildGameSpans(runs, buckets, Paths, Folders, 1000, 1020));
+    }
+
+    [Fact]
+    public void KeepsTheTrackContinuousAcrossOverlappingGames()
+    {
+        var runs = new[] { new AppRun(1, 1000, 1020), new AppRun(3, 1010, 1030) };
+        var buckets = new[]
+        {
+            new Bucket(1000, 5, 0, 2),
+            new Bucket(1010, 5, 0, 2),
+            new Bucket(1020, 5, 0, 2)
+        };
+
+        var spans = SpanBuilder.BuildGameSpans(runs, buckets, Paths, Folders, 1000, 1030);
+
+        // The label changes when one game hands over to the other, so this is two spans
+        // rather than one. What matters is that they abut: the strip must draw an
+        // unbroken game bar across the handover, with no slot left uncovered.
+        Assert.Equal(new[] { "game.exe", "terraria.exe" }, spans.Select(s => s.App));
+        Assert.All(spans, s => Assert.Equal("bg", s.Lvl));
+        Assert.Equal(1000, spans[0].T);
+        Assert.Equal(30, spans.Sum(s => s.D));
+        for (var i = 1; i < spans.Count; i++)
+            Assert.Equal(spans[i - 1].T + spans[i - 1].D, spans[i].T);
+    }
+
+    [Fact]
+    public void CoversSlotsWithNoBucketWhileTheGameKeepsRunning()
+    {
+        var runs = new[] { new AppRun(1, 1000, 1030) };
+
+        var spans = SpanBuilder.BuildGameSpans(runs, Array.Empty<Bucket>(), Paths, Folders, 1000, 1030);
+
+        Assert.Single(spans);
+        Assert.Equal("bg", spans[0].Lvl);
+    }
+
+    [Fact]
+    public void TreatsAnOpenEndedRunAsStillRunning()
+    {
+        var runs = new[] { new AppRun(1, 1000, null) };
+
+        var spans = SpanBuilder.BuildGameSpans(runs, Array.Empty<Bucket>(), Paths, Folders, 1000, 1030);
+
+        Assert.Equal(30, spans[0].D);
+    }
+
+    [Fact]
+    public void GameTrackDoesNotAffectPresenceSpans()
+    {
+        var buckets = new[] { new Bucket(1000, 5, 0, 1), new Bucket(1010, 5, 0, 2) };
+
+        var withGame = SpanBuilder.BuildPresence(buckets, 1000, 1020);
+        var withoutGame = SpanBuilder.BuildPresence(
+            buckets.Select(b => b with { FgAppId = null }).ToArray(), 1000, 1020);
+
+        Assert.Equal(withGame, withoutGame);
     }
 }

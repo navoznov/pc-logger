@@ -1,3 +1,4 @@
+using PcLogger.Core.Config;
 using PcLogger.Core.Model;
 
 namespace PcLogger.Core.Reporting;
@@ -121,5 +122,69 @@ public static class SpanBuilder
                 values[i] = (int)Math.Round(100.0 * seconds / Step);
 
         return new Intensity(start, Step, values);
+    }
+
+    public static IReadOnlyList<GameSpan> BuildGameSpans(
+        IReadOnlyList<AppRun> runs,
+        IReadOnlyList<Bucket> buckets,
+        IReadOnlyDictionary<long, string> paths,
+        GameFolders folders,
+        long fromTs,
+        long toTs,
+        int bucketSeconds = 10)
+    {
+        var gameRuns = runs
+            .Where(r => paths.TryGetValue(r.AppId, out var path) && folders.IsGame(path))
+            .OrderBy(r => r.Started)
+            .ToArray();
+
+        if (gameRuns.Length == 0) return Array.Empty<GameSpan>();
+
+        var byTs = buckets.ToDictionary(b => b.Ts);
+        var spans = new List<GameSpan>();
+
+        (string Lvl, string App)? run = null;
+        var runStart = 0L;
+
+        for (var ts = fromTs; ts < toTs; ts += bucketSeconds)
+        {
+            AppRun? covering = null;
+            foreach (var candidate in gameRuns)
+            {
+                if (candidate.Started <= ts && (candidate.Ended is null || candidate.Ended > ts))
+                {
+                    covering = candidate;
+                    break;
+                }
+            }
+
+            (string Lvl, string App)? slot = null;
+            if (covering is { } activeRun)
+            {
+                var focused = byTs.TryGetValue(ts, out var bucket)
+                    && bucket.FgAppId is { } fgId
+                    && paths.TryGetValue(fgId, out var fgPath)
+                    && folders.IsGame(fgPath)
+                        ? FileName(fgPath)
+                        : null;
+
+                slot = focused is not null
+                    ? ("fg", focused)
+                    : ("bg", FileName(paths[activeRun.AppId]));
+            }
+
+            if (slot?.Lvl != run?.Lvl || slot?.App != run?.App)
+            {
+                if (run is not null)
+                    spans.Add(new GameSpan(runStart, (int)(ts - runStart), run.Value.Lvl, run.Value.App));
+                run = slot;
+                runStart = ts;
+            }
+        }
+
+        if (run is not null)
+            spans.Add(new GameSpan(runStart, (int)(toTs - runStart), run.Value.Lvl, run.Value.App));
+
+        return spans;
     }
 }
