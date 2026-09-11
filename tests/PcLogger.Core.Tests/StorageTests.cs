@@ -76,3 +76,111 @@ public class BucketStoreTests : IDisposable
         Assert.Single(read);
     }
 }
+
+public class AppStoreTests : IDisposable
+{
+    private readonly string _path = Path.Combine(Path.GetTempPath(), $"pclog-{Guid.NewGuid():N}.db");
+
+    public void Dispose()
+    {
+        // WAL mode leaves -wal and -shm sidecars next to the database.
+        foreach (var f in new[] { _path, _path + "-wal", _path + "-shm" })
+            if (File.Exists(f)) File.Delete(f);
+    }
+
+    [Fact]
+    public void ReturnsSameIdForSamePath()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+
+        var first = store.GetOrCreateAppId(@"D:\Games\a.exe");
+        var second = store.GetOrCreateAppId(@"D:\Games\a.exe");
+
+        Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public void ReturnsDifferentIdsForDifferentPaths()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+
+        Assert.NotEqual(
+            store.GetOrCreateAppId(@"D:\Games\a.exe"),
+            store.GetOrCreateAppId(@"D:\Games\b.exe"));
+    }
+
+    [Fact]
+    public void ResolvesIdBackToPath()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+
+        var id = store.GetOrCreateAppId(@"D:\Games\a.exe");
+
+        Assert.Equal(@"D:\Games\a.exe", store.GetPath(id));
+        Assert.Null(store.GetPath(9999));
+    }
+
+    [Fact]
+    public void ClosesOpenRunAtGivenTime()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+        var id = store.GetOrCreateAppId(@"D:\Games\a.exe");
+
+        store.OpenRun(id, 1000);
+        store.CloseRun(id, 1600);
+
+        var runs = store.ReadRuns(0, 9999);
+        Assert.Single(runs);
+        Assert.Equal(new AppRun(id, 1000, 1600), runs[0]);
+    }
+
+    [Fact]
+    public void KeepsRunOpenUntilClosed()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+        var id = store.GetOrCreateAppId(@"D:\Games\a.exe");
+
+        store.OpenRun(id, 1000);
+
+        Assert.Null(store.ReadRuns(0, 9999)[0].Ended);
+    }
+
+    [Fact]
+    public void CloseDanglingClosesEveryOpenRun()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+        var a = store.GetOrCreateAppId(@"D:\Games\a.exe");
+        var b = store.GetOrCreateAppId(@"D:\Games\b.exe");
+
+        store.OpenRun(a, 1000);
+        store.OpenRun(b, 1100);
+        store.CloseRun(a, 1200);
+        store.CloseDangling(1300);
+
+        var runs = store.ReadRuns(0, 9999);
+        Assert.Equal(2, runs.Count);
+        Assert.All(runs, r => Assert.NotNull(r.Ended));
+        Assert.Equal(1200, runs.Single(r => r.AppId == a).Ended);
+        Assert.Equal(1300, runs.Single(r => r.AppId == b).Ended);
+    }
+
+    [Fact]
+    public void ReadRunsIncludesRunsOverlappingTheRange()
+    {
+        using var db = new Db(_path);
+        var store = new AppStore(db);
+        var id = store.GetOrCreateAppId(@"D:\Games\a.exe");
+
+        store.OpenRun(id, 1000);
+        store.CloseRun(id, 5000);
+
+        Assert.Single(store.ReadRuns(2000, 3000));
+        Assert.Empty(store.ReadRuns(6000, 7000));
+    }
+}
