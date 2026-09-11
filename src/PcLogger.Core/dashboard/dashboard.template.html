@@ -39,7 +39,7 @@
   .seg { position: absolute; top: 0; bottom: 0; }
   /* The regime verdict must not rely on hue alone: red/green is the most common
      colour-vision deficiency, and this track answers the report's whole question. */
-  .seg.over { background-image: repeating-linear-gradient(45deg,
+  .seg.over, .bar.over { background-image: repeating-linear-gradient(45deg,
       rgba(0,0,0,.28) 0 3px, rgba(0,0,0,0) 3px 7px); }
   .axis { display: flex; margin-left: 106px; color: var(--muted); font-size: 11px;
           border-top: 1px solid var(--line); padding-top: 4px; }
@@ -56,6 +56,19 @@
   .sliders label { display: flex; align-items: center; gap: 6px; }
   .legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted);
             font-size: 12px; margin-top: 10px; }
+  .heat { display: grid; grid-template-columns: 70px 1fr; gap: 6px; align-items: center; }
+  .heat-row { display: flex; gap: 1px; }
+  .heat-cell { flex: 1; height: 16px; border-radius: 2px; }
+  .heat-day { color: var(--muted); font-size: 11px; text-align: right; }
+  .heat-axis { display: flex; color: var(--muted); font-size: 11px;
+               border-top: 1px solid var(--line); padding-top: 4px; }
+  .heat-axis span { flex: 1; }
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; }
+  .bars-scale { color: var(--muted); font-size: 11px; text-align: right; margin-bottom: 4px; }
+  .bar { flex: 1; background-color: var(--game-fg); border-radius: 3px 3px 0 0; }
+  .bar.over { background-color: var(--over); }
+  .bar-labels { display: flex; gap: 6px; margin-top: 6px; }
+  .bar-label { flex: 1; color: var(--muted); font-size: 11px; text-align: center; }
   .hidden { display: none; }
 </style>
 </head>
@@ -106,7 +119,19 @@
     </div>
   </section>
 
-  <section id="weekView" class="hidden"></section>
+  <section id="weekView" class="hidden">
+    <div class="kpis" id="weekKpis"></div>
+    <div class="panel"><div class="heat" id="heat"></div></div>
+    <div class="panel">
+      <div class="bars-scale" id="barsScale"></div>
+      <div class="bars" id="bars"></div>
+      <div class="bar-labels" id="barLabels"></div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--game-fg)"></i>экранное время за день</span>
+        <span><i class="dot" style="background:var(--over)"></i>день с нарушениями</span>
+      </div>
+    </div>
+  </section>
 </div>
 
 <script src="regime.js"></script>
@@ -291,23 +316,104 @@ function draw() {
   input.addEventListener('input', function () {
     opts[key] = Number(input.value);
     document.getElementById(id + 'V').textContent = input.value;
-    draw();
+    redraw();
   });
 });
 
 document.getElementById('day').addEventListener('change', function (event) {
   view = { from: Number(event.target.value), to: Number(event.target.value) + 86400 };
-  draw();
+  redraw();
 });
 document.getElementById('prev').addEventListener('click', function () {
   view = { from: view.from - 86400, to: view.to - 86400 };
   document.getElementById('day').value = view.from;
-  draw();
+  redraw();
 });
 document.getElementById('next').addEventListener('click', function () {
   view = { from: view.from + 86400, to: view.to + 86400 };
   document.getElementById('day').value = view.from;
-  draw();
+  redraw();
+});
+
+const WEEK_DAYS = 7;
+const WEEK_SLOT_MINUTES = 30;
+
+function shortDate(ts) {
+  return new Date((ts + DATA.tz_offset_minutes * 60) * 1000).toISOString().slice(5, 10);
+}
+
+function drawWeek() {
+  const rows = Render.weekMatrix(DATA.spans, view.from, WEEK_DAYS, WEEK_SLOT_MINUTES);
+
+  let axis = '';
+  for (let hour = 0; hour < 24; hour += 3) {
+    axis += '<span>' + String(hour).padStart(2, '0') + ':00</span>';
+  }
+
+  document.getElementById('heat').innerHTML = rows.map(function (row) {
+    const cells = row.slots.map(function (value, index) {
+      const minute = index * WEEK_SLOT_MINUTES;
+      const clock = String(Math.floor(minute / 60)).padStart(2, '0') + ':' +
+                    String(minute % 60).padStart(2, '0');
+      return '<div class="heat-cell" title="' + clock + ' · ' + Math.round(100 * value) +
+        ' %" style="background-color:var(--game-fg);opacity:' +
+        (0.08 + 0.92 * value).toFixed(2) + '"></div>';
+    }).join('');
+    return '<div class="heat-day">' + shortDate(row.from) + '</div>' +
+           '<div class="heat-row">' + cells + '</div>';
+  }).join('') + '<div></div><div class="heat-axis">' + axis + '</div>';
+
+  const perDay = rows.map(function (row) {
+    const spans = DATA.spans.filter(function (s) {
+      return s.t + s.d > row.from && s.t < row.from + 86400;
+    });
+    const result = Regime.buildBlocks(spans, opts);
+    return {
+      from: row.from,
+      screen: Selection.stats(spans, [], row.from, row.from + 86400).active,
+      violations: result.blocks.filter(function (b) { return b.verdict === 'over'; }).length
+    };
+  });
+
+  const peak = Math.max.apply(null, perDay.map(function (d) { return d.screen; }).concat([1]));
+  document.getElementById('bars').innerHTML = perDay.map(function (d) {
+    return '<div class="bar' + (d.violations ? ' over' : '') + '" style="height:' +
+      (100 * d.screen / peak) + '%" title="' + shortDate(d.from) + ' · ' +
+      Render.fmtDuration(d.screen) +
+      (d.violations ? ', нарушений: ' + d.violations : '') + '"></div>';
+  }).join('');
+  document.getElementById('barLabels').innerHTML = perDay.map(function (d) {
+    return '<div class="bar-label">' + shortDate(d.from) + '</div>';
+  }).join('');
+
+  // Bars are normalised to the tallest day, so the chart is unreadable in
+  // absolute terms without naming what the full height stands for.
+  document.getElementById('barsScale').textContent =
+    'высота столбика — доля от ' + Render.fmtDuration(peak);
+
+  const bad = perDay.filter(function (d) { return d.violations > 0; }).length;
+  document.getElementById('weekKpis').innerHTML =
+    '<div class="kpi"><div class="label">Дней с нарушениями</div><div class="value">' +
+    bad + ' из ' + perDay.length + '</div></div>' +
+    '<div class="kpi"><div class="label">Всего за неделю</div><div class="value">' +
+    Render.fmtDuration(perDay.reduce(function (a, d) { return a + d.screen; }, 0)) +
+    '</div></div>';
+}
+
+// Both views read the same spans through the same thresholds, so every control
+// that changes either one has to repaint whichever view is on screen.
+function redraw() {
+  if (document.getElementById('weekView').classList.contains('hidden')) draw();
+  else drawWeek();
+}
+
+document.getElementById('mode').addEventListener('click', function () {
+  const week = document.getElementById('weekView');
+  const showWeek = week.classList.contains('hidden');
+  week.classList.toggle('hidden', !showWeek);
+  document.getElementById('dayView').classList.toggle('hidden', showWeek);
+  this.textContent = showWeek ? 'День' : 'Неделя';
+  redraw();
 });
 
 ['tPower', 'tActive', 'tGame', 'tRegime'].forEach(enableBrush);

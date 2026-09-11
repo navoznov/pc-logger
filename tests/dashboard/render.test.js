@@ -42,3 +42,48 @@ test('day bounds cover exactly 24 hours in local time', () => {
   assert.ok(from <= 1757606400 && 1757606400 < to);
   assert.equal((from + 180 * 60) % 86400, 0);
 });
+
+test('week matrix has one row per day, newest last', () => {
+  const rows = Render.weekMatrix([], 700000, 7, 30);
+
+  assert.equal(rows.length, 7);
+  assert.equal(rows[6].from, 700000);
+  assert.equal(rows[0].from, 700000 - 6 * 86400);
+});
+
+test('each row is split into slots of the requested size', () => {
+  const rows = Render.weekMatrix([], 0, 1, 30);
+
+  assert.equal(rows[0].slots.length, 48);
+});
+
+test('a fully active slot reads as one', () => {
+  const spans = [{ t: 0, d: 1800, s: 'active' }];
+
+  const rows = Render.weekMatrix(spans, 0, 1, 30);
+
+  assert.equal(rows[0].slots[0], 1);
+  assert.equal(rows[0].slots[1], 0);
+});
+
+test('a half active slot reads as one half', () => {
+  const spans = [{ t: 0, d: 900, s: 'active' }];
+
+  assert.equal(Render.weekMatrix(spans, 0, 1, 30)[0].slots[0], 0.5);
+});
+
+test('a span crossing a slot boundary is split between both slots', () => {
+  const spans = [{ t: 900, d: 1800, s: 'active' }];
+
+  const rows = Render.weekMatrix(spans, 0, 1, 30);
+
+  assert.deepEqual(rows[0].slots.slice(0, 3), [0.5, 0.5, 0]);
+});
+
+test('away and off time is not counted as activity', () => {
+  const spans = [{ t: 0, d: 1800, s: 'away' }, { t: 1800, d: 1800, s: 'off' }];
+
+  const rows = Render.weekMatrix(spans, 0, 1, 30);
+
+  assert.deepEqual(rows[0].slots.slice(0, 2), [0, 0]);
+});

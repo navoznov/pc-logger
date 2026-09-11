@@ -3,8 +3,9 @@ using PcLogger.Core.Model;
 using PcLogger.Core.Reporting;
 using PcLogger.Core.Storage;
 
-// Generates three days of synthetic activity so the dashboard can be developed
-// and reviewed without a Windows machine.
+// Generates a week of synthetic activity so the dashboard can be developed
+// and reviewed without a Windows machine. A week, not a day, because the week
+// view needs seven populated rows to be reviewable at all.
 
 var root = Path.Combine(Path.GetTempPath(), "pclogger-demo");
 Directory.CreateDirectory(root);
@@ -22,7 +23,7 @@ var gameId = apps.GetOrCreateAppId(@"D:\Games\deeprock\game.exe");
 var browserId = apps.GetOrCreateAppId(@"C:\Program Files\Chrome\chrome.exe");
 var random = new Random(42);
 
-for (var day = 0; day < 3; day++)
+for (var day = 0; day < 7; day++)
 {
     var dayStart = now - (long)day * 86_400;
     // A session from 16:00-ish: alternating play and rest of varying honesty.
@@ -36,8 +37,14 @@ for (var day = 0; day < 3; day++)
         // rest falls below breakMinutes often enough that some rounds merge into one
         // long block and render "over". A generator that only ever produces violations
         // cannot exercise the dashboard's main visual distinction.
-        var playMinutes = random.Next(10, 17);
-        var restMinutes = random.Next(12, 21);
+        // Every third day the child keeps the regime: rest always clears the 15-minute
+        // break threshold, so no two rounds merge and no block can exceed 15 + 2. The
+        // other days mix honest and dishonest rests. Without both kinds the week view
+        // has nothing to contrast - a demo where every day is a violation cannot show
+        // that the report distinguishes them.
+        var disciplined = day % 3 == 0;
+        var playMinutes = disciplined ? random.Next(10, 16) : random.Next(10, 17);
+        var restMinutes = disciplined ? random.Next(16, 22) : random.Next(12, 21);
         var focused = round % 3 != 2;
 
         for (var s = 0; s < playMinutes * 60; s += 10)
@@ -53,7 +60,7 @@ for (var day = 0; day < 3; day++)
 }
 
 var config = new AppConfig(new[] { @"D:\Games" });
-var json = new ReportBuilder(db, config).BuildJson(now, historyDays: 5);
+var json = new ReportBuilder(db, config).BuildJson(now, historyDays: 9);
 
 var dashboard = Path.Combine(AppContext.BaseDirectory, "dashboard");
 var html = ReportBuilder.Render(

@@ -40,5 +40,35 @@
     return ((value % size) + size) % size;
   }
 
-  root.Render = { fmtDuration: fmtDuration, layout: layout, dayBounds: dayBounds };
+  // Folds presence spans into a day x slot grid of activity density: each cell is
+  // the share of its slot that was active, so a heatmap can shade it directly.
+  // The caller passes a day boundary that already carries the local-time offset,
+  // which is why no timezone argument appears here.
+  function weekMatrix(spans, lastDayFrom, days, slotMinutes) {
+    const slotSeconds = slotMinutes * 60;
+    const perDay = Math.round(86400 / slotSeconds);
+    const active = spans.filter(function (s) { return s.s === 'active'; });
+    const rows = [];
+
+    for (let day = days - 1; day >= 0; day--) {
+      const from = lastDayFrom - day * 86400;
+      const slots = new Array(perDay).fill(0);
+
+      active.forEach(function (s) {
+        for (let i = 0; i < perDay; i++) {
+          const slotFrom = from + i * slotSeconds;
+          const covered = Math.max(0,
+            Math.min(s.t + s.d, slotFrom + slotSeconds) - Math.max(s.t, slotFrom));
+          if (covered > 0) slots[i] += covered / slotSeconds;
+        }
+      });
+
+      rows.push({ from: from, slots: slots.map(function (v) { return Math.min(1, v); }) });
+    }
+
+    return rows;
+  }
+
+  root.Render = { fmtDuration: fmtDuration, layout: layout,
+                  dayBounds: dayBounds, weekMatrix: weekMatrix };
 })(typeof module !== 'undefined' && module.exports ? module.exports : window);
