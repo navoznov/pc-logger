@@ -141,3 +141,14 @@ test('a span touching the window only at its edge contributes nothing', () => {
 
   assert.equal(Selection.stats(spans, [], 1000, 2000).active, 0);
 });
+
+test('the at-pc ratio counts powered-off time, not only time spent away', () => {
+  // 60 min active, 30 away, 30 off. Ignoring `off` would give 2:1 instead of 1:1.
+  const spans = [
+    { t: 0, d: 3600, s: 'active' },
+    { t: 3600, d: 1800, s: 'away' },
+    { t: 5400, d: 1800, s: 'off' }
+  ];
+
+  assert.equal(Selection.stats(spans, [], 0, 7200).ratio, 1);
+});

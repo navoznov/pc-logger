@@ -115,11 +115,16 @@ PcLogger.exe --uninstall   # убирает её
 
 Подробности отказов дополнительно пишутся в `error.log` рядом с базой.
 
+## Ограничения
+
+Что программа делает приблизительно или не так, как можно ожидать, собрано в
+[docs/known-limitations.md](docs/known-limitations.md) — с причинами.
+
 ## Разработка
 
 ```
-dotnet test tests/PcLogger.Core.Tests    # 106 тестов
-npm test                                 # 39 тестов
+dotnet test tests/PcLogger.Core.Tests    # 121 тест
+npm test                                 # 45 тестов
 dotnet run --project tools/DemoReport    # отчёт на синтетических данных
 ```
 

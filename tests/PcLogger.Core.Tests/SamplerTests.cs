@@ -59,6 +59,21 @@ public class SamplerTests
 
     // Would catch a dropped _foreground.Clear(): without it the first bucket's app keeps
     // accumulating and wins the second bucket too.
+    // Keyboard and gamepad are counted independently; no test had both true at once, so a
+    // swapped or shared counter would not have shown up.
+    [Fact]
+    public void CountsKeyboardAndGamepadSecondsIndependently()
+    {
+        var sampler = new Sampler();
+        for (var t = 1000L; t < 1004L; t++) sampler.Tick(t, new SystemSnapshot(true, true, null));
+        for (var t = 1004L; t < 1010L; t++) sampler.Tick(t, new SystemSnapshot(true, false, null));
+
+        var bucket = sampler.Tick(1010, Idle)!.Value;
+
+        Assert.Equal(10, bucket.Active);
+        Assert.Equal(4, bucket.Pad);
+    }
+
     [Fact]
     public void KeepsConsecutiveBucketsIsolatedFromEachOther()
     {

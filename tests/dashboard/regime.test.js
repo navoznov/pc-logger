@@ -146,3 +146,24 @@ test('splitting by day keeps every block exactly once', () => {
   assert.deepEqual(perDay, [2, 0, 1]);
   assert.equal(perDay.reduce(function (a, b) { return a + b; }, 0), built.blocks.length);
 });
+
+// Nothing asserted a gap's own position or length, only its kind — so a gap emitted at the
+// wrong time or with the wrong duration would have drawn in the wrong place unnoticed.
+test('a gap carries the exact interval between the blocks it separates', () => {
+  const spans = [span(0, 15, 'active'), span(15, 20, 'away'), span(35, 15, 'active')];
+
+  const { gaps } = Regime.buildBlocks(spans, OPTS);
+
+  const brk = gaps.find(g => g.kind === 'break');
+  assert.equal(brk.t, 15 * MIN);
+  assert.equal(brk.d, 20 * MIN);
+});
+
+test('a short gap is measured from the end of the block, not from the span', () => {
+  const spans = [span(0, 15, 'active'), span(15, 8, 'away'), span(23, 5, 'active')];
+
+  const short = Regime.buildBlocks(spans, OPTS).gaps.find(g => g.kind === 'short');
+
+  assert.equal(short.t, 15 * MIN);
+  assert.equal(short.d, 8 * MIN);
+});
