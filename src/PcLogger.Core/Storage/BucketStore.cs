@@ -51,4 +51,12 @@ public sealed class BucketStore
         }
         return result;
     }
+
+    /// <summary>Timestamp of the newest stored bucket, or null when the table is empty.</summary>
+    public long? LastTs()
+    {
+        using var cmd = _db.Connection.CreateCommand();
+        cmd.CommandText = "SELECT MAX(ts) FROM buckets;";
+        return cmd.ExecuteScalar() is long ts ? ts : null;
+    }
 }
