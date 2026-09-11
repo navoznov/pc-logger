@@ -42,4 +42,80 @@ public static class SpanBuilder
 
         return spans;
     }
+
+    public static IReadOnlyList<AppSpan> BuildAppSpans(
+        IReadOnlyList<Bucket> buckets,
+        IReadOnlyDictionary<long, string> paths,
+        int bucketSeconds = 10)
+    {
+        var spans = new List<AppSpan>();
+
+        string? runApp = null;
+        var runStart = 0L;
+        var runEnd = 0L;
+
+        foreach (var bucket in buckets.OrderBy(b => b.Ts))
+        {
+            var app = ResolveName(bucket, paths);
+            var contiguous = runApp is not null && bucket.Ts == runEnd && app == runApp;
+
+            if (contiguous)
+            {
+                runEnd = bucket.Ts + bucketSeconds;
+                continue;
+            }
+
+            if (runApp is not null)
+                spans.Add(new AppSpan(runStart, (int)(runEnd - runStart), runApp));
+
+            runApp = app;
+            runStart = bucket.Ts;
+            runEnd = bucket.Ts + bucketSeconds;
+        }
+
+        if (runApp is not null)
+            spans.Add(new AppSpan(runStart, (int)(runEnd - runStart), runApp));
+
+        return spans;
+    }
+
+    private static string? ResolveName(Bucket bucket, IReadOnlyDictionary<long, string> paths)
+    {
+        if (bucket.Active == 0 && bucket.Pad == 0) return null;
+        if (bucket.FgAppId is null) return null;
+        return paths.TryGetValue(bucket.FgAppId.Value, out var path) ? FileName(path) : null;
+    }
+
+    /// <summary>
+    /// Last segment of a Windows path. Path.GetFileName cannot be used: it honours the
+    /// running platform's separator, so on macOS it returns the whole "D:\Games\game.exe"
+    /// unchanged. Stored paths are always Windows paths, wherever the report is built.
+    /// </summary>
+    private static string FileName(string path) => path.Split('\\', '/')[^1];
+
+    public static Intensity BuildIntensity(
+        IReadOnlyList<Bucket> buckets, long fromTs, long toTs, int bucketSeconds = 10)
+    {
+        const int Step = 60;
+        var start = fromTs - fromTs % Step;
+        var minutes = (int)Math.Ceiling((toTs - start) / (double)Step);
+        var values = new int?[minutes];
+
+        foreach (var bucket in buckets)
+        {
+            var index = (int)((bucket.Ts - start) / Step);
+            if (index < 0 || index >= minutes) continue;
+
+            // Keyboard and gamepad seconds may overlap within a bucket, so the
+            // larger of the two is the only count that cannot exceed the bucket.
+            var seconds = Math.Max(bucket.Active, bucket.Pad);
+            values[index] = (values[index] ?? 0) + seconds;
+        }
+
+        for (var i = 0; i < minutes; i++)
+            if (values[i] is { } seconds)
+                values[i] = (int)Math.Round(100.0 * seconds / Step);
+
+        return new Intensity(start, Step, values);
+    }
 }
