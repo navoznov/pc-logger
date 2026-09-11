@@ -31,8 +31,13 @@ for (var day = 0; day < 3; day++)
 
     for (var round = 0; round < 6; round++)
     {
-        var playMinutes = random.Next(12, 26);
-        var restMinutes = random.Next(4, 18);
+        // Ranges are chosen so the demo shows BOTH verdicts. Play never exceeds the
+        // 15 + 2 limit on its own, so a round separated by a real break renders "ok";
+        // rest falls below breakMinutes often enough that some rounds merge into one
+        // long block and render "over". A generator that only ever produces violations
+        // cannot exercise the dashboard's main visual distinction.
+        var playMinutes = random.Next(10, 17);
+        var restMinutes = random.Next(12, 21);
         var focused = round % 3 != 2;
 
         for (var s = 0; s < playMinutes * 60; s += 10)
