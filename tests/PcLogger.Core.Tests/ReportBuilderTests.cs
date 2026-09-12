@@ -217,7 +217,7 @@ public class BuildJsonTests : IDisposable
     public void EmbedsEveryDashboardAssetInTheAssembly()
     {
         Assert.Equal(
-            new[] { "dashboard.template.html", "regime.js", "render.js", "selection.js" },
+            new[] { "dashboard.template.html", "i18n.js", "regime.js", "render.js", "selection.js" },
             DashboardAssets.EmbeddedNames());
     }
 
