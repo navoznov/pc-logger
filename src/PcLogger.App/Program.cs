@@ -1,4 +1,5 @@
 using PcLogger.App.Win32;
+using PcLogger.Core.Localization;
 
 namespace PcLogger.App;
 
@@ -44,7 +45,7 @@ internal static class Program
             // Startup failed, so there is no tray icon to complain through and nothing has
             // been recorded. Say so rather than vanishing.
             Log(e);
-            MessageBox.Show("PC Logger не смог запуститься:\n\n" + e.Message,
+            MessageBox.Show(Strings.Get("app.startupFailed").Replace("{message}", e.Message),
                 "PC Logger", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
