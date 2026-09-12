@@ -86,7 +86,7 @@ test('no Russian text is hard-coded outside the dictionary', () => {
 });
 
 test('every key passed to t() as a literal exists in the dictionary', () => {
-  const pattern = /I18n\.t\(\s*'([^']+)'/g;
+  const pattern = /I18n\.t\(\s*'([^']+)'/gi;
   let match;
   let seen = 0;
   while ((match = pattern.exec(ALL_SOURCE)) !== null) {
