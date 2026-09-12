@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Win32;
 using PcLogger.App.Win32;
 using PcLogger.Core.Config;
+using PcLogger.Core.Localization;
 using PcLogger.Core.Recording;
 using PcLogger.Core.Reporting;
 using PcLogger.Core.Storage;
@@ -22,11 +23,11 @@ public sealed class TrayApp : ApplicationContext
     public TrayApp(string dataDir)
     {
         _menu = new ContextMenuStrip();
-        _menu.Items.Add("Отчёт", null, (_, _) => Guarded(() => OpenReport(dataDir)));
-        _menu.Items.Add("Открыть папку данных", null, (_, _) => Guarded(() => Open(dataDir)));
-        _menu.Items.Add("Игровые папки", null, (_, _) => Guarded(() => OpenConfig(dataDir)));
+        _menu.Items.Add(Strings.Get("tray.report"), null, (_, _) => Guarded(() => OpenReport(dataDir)));
+        _menu.Items.Add(Strings.Get("tray.dataFolder"), null, (_, _) => Guarded(() => Open(dataDir)));
+        _menu.Items.Add(Strings.Get("tray.gameFolders"), null, (_, _) => Guarded(() => OpenConfig(dataDir)));
         _menu.Items.Add(new ToolStripSeparator());
-        _menu.Items.Add("Выход", null, (_, _) => Quit());
+        _menu.Items.Add(Strings.Get("tray.quit"), null, (_, _) => Quit());
 
         _icon = new NotifyIcon
         {
@@ -58,11 +59,13 @@ public sealed class TrayApp : ApplicationContext
     private void OnRecorderError(Exception e)
     {
         _failures++;
-        _icon.Text = Truncate($"PC Logger — сбой записи ({_failures})");
+        _icon.Text = Truncate(Strings.Get("tray.failureTip")
+            .Replace("{n}", _failures.ToString()));
         if (_failures == 1)
         {
             _icon.ShowBalloonTip(10_000, "PC Logger",
-                "Запись прервана: " + e.Message, ToolTipIcon.Warning);
+                Strings.Get("tray.failureBalloon").Replace("{message}", e.Message),
+                ToolTipIcon.Warning);
         }
     }
 
