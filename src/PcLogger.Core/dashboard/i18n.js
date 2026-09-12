@@ -21,6 +21,7 @@
       'nav.mode.tip': 'Переключить между лентой одного дня и сводкой за семь дней',
       'nav.theme': 'Тема',
       'nav.theme.tip': 'Светлая или тёмная тема. По умолчанию отчёт следует настройке системы.',
+      'nav.lang.tip': 'Язык отчёта',
 
       // Слайдеры порогов
       'opt.session.label': 'Блок, мин',
@@ -166,6 +167,7 @@
       'nav.mode.tip': 'Switch between the single-day lane and the seven-day summary',
       'nav.theme': 'Theme',
       'nav.theme.tip': 'Light or dark theme. By default the report follows the system setting.',
+      'nav.lang.tip': 'Report language',
 
       // Threshold sliders
       'opt.session.label': 'Block, min',

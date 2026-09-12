@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using PcLogger.Core.Config;
+using PcLogger.Core.Localization;
 using PcLogger.Core.Storage;
 
 namespace PcLogger.Core.Reporting;
@@ -49,6 +50,10 @@ public sealed class ReportBuilder
         {
             generated = nowTs,
             tz_offset_minutes = (int)TimeZoneInfo.Local.GetUtcOffset(DateTimeOffset.FromUnixTimeSeconds(nowTs)).TotalMinutes,
+            // The language the report OPENS in. The switcher in the page overrides it and
+            // remembers the choice; this is only the default, and it is the same default the
+            // tray speaks, so the two cannot disagree on a fresh machine.
+            lang = Strings.Current,
             defaults = new { micro_gap = 3, break_minutes = 15, session_minutes = 15, tolerance = 2, day_norm_hours = 2 },
             spans = SpanBuilder.BuildPresence(buckets, from, to, BucketSeconds)
                 .Select(x => new { t = x.T, d = x.D, s = x.S }),

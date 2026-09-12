@@ -145,6 +145,7 @@
     <select id="day" data-i18n-title="nav.pickDay" data-i18n-aria="nav.pickDay"></select>
     <button id="next" data-i18n-title="nav.nextDay" data-i18n-aria="nav.nextDay">→</button>
     <button id="mode" data-i18n-title="nav.mode.tip"></button>
+    <select id="lang" data-i18n-title="nav.lang.tip"></select>
     <button id="theme" data-i18n="nav.theme" data-i18n-title="nav.theme.tip"></button>
   </header>
 
@@ -244,10 +245,39 @@
 <script src="selection.js"></script>
 <script src="render.js"></script>
 <script>
-Render.use(I18n);
-I18n.set('ru');
-
 const DATA = /*__DATA__*/;
+
+Render.use(I18n);
+
+// The language the reader chose wins over the one Windows was set to when the report was
+// built: the report is a file you open, and its language belongs with the theme switch
+// rather than with the collector's configuration.
+const LANG_KEY = 'pclogger.lang';
+I18n.set(localStorage.getItem(LANG_KEY) || DATA.lang);
+
+function applyLang() {
+  document.documentElement.lang = I18n.lang();
+  applyStatic();
+  applyMode(weekShown());
+  fillDayPicker();   // day labels carry a weekday name; it ends with picker.value = day.from
+  redraw();
+  // redraw() repaints the selection panel only through draw(); drawWeek() never touches it,
+  // so switching language in the week view would leave last language's numbers standing.
+  if (selected) showSelection(selected.from, selected.to); else clearSelection();
+}
+
+function fillLangPicker() {
+  const picker = document.getElementById('lang');
+  picker.innerHTML = I18n.langs().map(function (code) {
+    return '<option value="' + code + '">' + I18n.DICTS[code].$name + '</option>';
+  }).join('');
+  picker.value = I18n.lang();
+  picker.addEventListener('change', function () {
+    I18n.set(picker.value);
+    localStorage.setItem(LANG_KEY, I18n.lang());
+    applyLang();
+  });
+}
 
 const opts = {
   sessionMinutes: DATA.defaults.session_minutes,
@@ -1100,8 +1130,10 @@ enableWheelZoom();
 buildLane();
 enableCursorReadout();
 applyMode(false);
+document.documentElement.lang = I18n.lang();
 applyStatic();
 fillDayPicker();
+fillLangPicker();
 document.getElementById('prev').disabled = day.from <= dayRange.first;
 document.getElementById('next').disabled = day.from >= dayRange.last;
 draw();

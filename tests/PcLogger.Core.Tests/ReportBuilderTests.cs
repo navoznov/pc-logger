@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PcLogger.Core.Config;
+using PcLogger.Core.Localization;
 using PcLogger.Core.Model;
 using PcLogger.Core.Reporting;
 using PcLogger.Core.Storage;
@@ -138,8 +139,16 @@ public class BuildJsonTests : IDisposable
     {
         var root = Build(86_400);
 
-        foreach (var key in new[] { "generated", "tz_offset_minutes", "defaults", "spans", "app_spans", "game_spans", "intensity", "events" })
+        foreach (var key in new[] { "generated", "tz_offset_minutes", "lang", "defaults", "spans", "app_spans", "game_spans", "intensity", "events" })
             Assert.True(root.TryGetProperty(key, out _), $"missing key: {key}");
+    }
+
+    [Fact]
+    public void ThePayloadCarriesTheLanguageTheReportOpensIn()
+    {
+        var lang = Build(86_400).GetProperty("lang").GetString();
+
+        Assert.Contains(lang, Strings.All.Keys);
     }
 
     // The browser reads this payload by field name and never validates it: a renamed field
