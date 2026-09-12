@@ -18,7 +18,12 @@ test('falls back to English and then to the key itself', () => {
 });
 
 test('an unknown language falls back to English', () => {
-  I18n.set('de');
+  // 'de' and friends are candidates, not guarantees — the design's own example (§8) adds a
+  // 'de' dictionary, so this picks whichever candidate nobody has added yet instead of
+  // hardcoding one that may legitimately exist.
+  const unsupported = ['de', 'fr', 'ja', 'zz'].find(function (code) { return !I18n.DICTS[code]; });
+  assert.ok(unsupported, 'all candidate codes are now supported languages — add another candidate');
+  I18n.set(unsupported);
   assert.equal(I18n.lang(), 'en');
   assert.equal(I18n.t('legend.break'), 'break');
 });

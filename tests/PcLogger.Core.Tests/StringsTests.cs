@@ -25,10 +25,21 @@ public class StringsTests
     [InlineData("ru-RU", "ru")]
     [InlineData("ru", "ru")]
     [InlineData("en-US", "en")]
-    [InlineData("de-DE", "en")]
     [InlineData("", "en")]
     public void ResolveFallsBackToEnglish(string culture, string expected) =>
         Assert.Equal(expected, Strings.Resolve(CultureInfo.GetCultureInfo(culture)));
+
+    [Fact]
+    public void ResolveFallsBackToEnglishForAnUnsupportedCulture()
+    {
+        // "de" and friends are candidates, not guarantees — the design's own example (§8) adds
+        // a "de" entry to Strings.All, so this picks whichever candidate nobody has added yet
+        // instead of hardcoding one that may legitimately become supported.
+        var unsupported = new[] { "de-DE", "fr-FR", "ja-JP", "zz-ZZ" }
+            .First(c => !Strings.All.ContainsKey(CultureInfo.GetCultureInfo(c).TwoLetterISOLanguageName));
+
+        Assert.Equal("en", Strings.Resolve(CultureInfo.GetCultureInfo(unsupported)));
+    }
 
     // NotifyIcon.Text throws above 63 characters and TrayApp.Truncate cuts it mid-word,
     // so the formatted tooltip has to fit at a plausible failure count.
