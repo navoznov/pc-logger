@@ -96,7 +96,78 @@
     return rows;
   }
 
+  // Ten minutes is the floor on purpose: buckets are ten seconds wide and the intensity
+  // histogram is per minute, so a tighter window stretches the same rectangles without
+  // revealing anything that was not already on screen.
+  const MIN_WINDOW = 600;
+
+  // Steps a clock reads without arithmetic. The axis takes the tightest one that still fits
+  // inside MAX_TICKS labels, so a zoomed lane keeps about the density of the full day.
+  const TICK_STEPS = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800];
+  const MAX_TICKS = 10;
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  // Slides a window of a fixed width until it sits inside the bounds. Clamping the two edges
+  // separately would instead shorten the window at the day's edges, so zooming out at 23:50
+  // would hand back less than the width it just promised.
+  function fit(from, width, bounds) {
+    const start = clamp(from, bounds.from, bounds.to - width);
+    return { from: start, to: start + width };
+  }
+
+  // factor < 1 zooms in, factor > 1 zooms out. The moment under the cursor keeps its
+  // position in the window, which is what makes the wheel land where the eye is pointing.
+  function zoom(view, anchor, factor, bounds) {
+    const width = view.to - view.from;
+    const next = Math.round(clamp(width * factor, MIN_WINDOW, bounds.to - bounds.from));
+    const ratio = width === 0 ? 0.5 : (anchor - view.from) / width;
+    return fit(Math.round(anchor - ratio * next), next, bounds);
+  }
+
+  // A wheel event reports its delta in one of three units, and only the browser knows which.
+  // Firefox sends a mouse notch as three LINES, some browsers send whole PAGES, and a handler
+  // that reads either number as pixels moves the lane by almost nothing on the first and by a
+  // whole day on the second.
+  const LINE_HEIGHT = 16;
+
+  // Which way the wheel actually went. One branch has to answer three devices: a plain wheel
+  // reports on Y, a two-finger swipe on X, and Shift+wheel lands on either — some browsers
+  // turn it into a horizontal delta, others keep it vertical and only set the modifier.
+  function wheelAxis(deltaX, deltaY) {
+    return Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
+  }
+
+  function wheelPixels(delta, mode, pageSize) {
+    if (mode === 1) return delta * LINE_HEIGHT;
+    if (mode === 2) return delta * pageSize;
+    return delta;
+  }
+
+  function pan(view, seconds, bounds) {
+    return fit(Math.round(view.from + seconds), view.to - view.from, bounds);
+  }
+
+  // Labels are multiples of the step counted FROM the origin, not from the window: a window
+  // that starts at 08:27 must still be labelled 08:30, 08:40, and so on. The origin is the
+  // day boundary, which already carries the local-time offset.
+  function ticks(from, to, origin) {
+    const width = to - from;
+    const step = TICK_STEPS.find(function (s) { return width / s <= MAX_TICKS; }) ||
+                 TICK_STEPS[TICK_STEPS.length - 1];
+    const out = [];
+    for (let t = origin + Math.ceil((from - origin) / step) * step; t < to; t += step) {
+      out.push(t);
+    }
+    return out;
+  }
+
   root.Render = { fmtDuration: fmtDuration, layout: layout,
                   dayBounds: dayBounds, weekMatrix: weekMatrix,
-                  clock: clock, weekday: weekday, itemAt: itemAt };
+                  clock: clock, weekday: weekday, itemAt: itemAt,
+                  zoom: zoom, pan: pan, ticks: ticks,
+                  wheelAxis: wheelAxis, wheelPixels: wheelPixels,
+                  MIN_WINDOW: MIN_WINDOW };
 })(typeof module !== 'undefined' && module.exports ? module.exports : window);
