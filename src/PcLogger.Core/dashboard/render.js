@@ -1,12 +1,17 @@
 (function (root) {
   'use strict';
 
+  // Injected rather than read from a global: this file is also loaded by node tests, which
+  // have no window to hang I18n on.
+  let i18n = null;
+  function use(module) { i18n = module; }
+
   function fmtDuration(seconds) {
     const total = Math.max(0, Math.floor(seconds / 60));
     const hours = Math.floor(total / 60);
     const minutes = total % 60;
-    if (hours === 0) return minutes + ' м';
-    return hours + ' ч ' + String(minutes).padStart(2, '0') + ' м';
+    if (hours === 0) return i18n.t('fmt.m', { m: minutes });
+    return i18n.t('fmt.hm', { h: hours, m: String(minutes).padStart(2, '0') });
   }
 
   // Every clock in the report is local wall time built by shifting the epoch and reading the
@@ -16,10 +21,17 @@
     return new Date((ts + tzOffsetMinutes * 60) * 1000).toISOString().slice(11, 16);
   }
 
-  const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  // Cached per language: the week view asks for fourteen of these on every repaint, and a
+  // fresh Intl.DateTimeFormat is expensive. A new language brings its own day names.
+  const weekdayFormats = {};
 
   function weekday(ts, tzOffsetMinutes) {
-    return WEEKDAYS[new Date((ts + tzOffsetMinutes * 60) * 1000).getUTCDay()];
+    const lang = i18n.lang();
+    if (!weekdayFormats[lang]) {
+      weekdayFormats[lang] =
+        new Intl.DateTimeFormat(lang, { weekday: 'short', timeZone: 'UTC' });
+    }
+    return weekdayFormats[lang].format(new Date((ts + tzOffsetMinutes * 60) * 1000));
   }
 
   // What sits under a moment. Searched from the end, because items are painted in order and
@@ -164,7 +176,7 @@
     return out;
   }
 
-  root.Render = { fmtDuration: fmtDuration, layout: layout,
+  root.Render = { use: use, fmtDuration: fmtDuration, layout: layout,
                   dayBounds: dayBounds, weekMatrix: weekMatrix,
                   clock: clock, weekday: weekday, itemAt: itemAt,
                   zoom: zoom, pan: pan, ticks: ticks,

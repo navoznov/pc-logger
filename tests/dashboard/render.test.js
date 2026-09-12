@@ -1,14 +1,26 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { Render } = require('../../src/PcLogger.Core/dashboard/render.js');
+const { I18n } = require('../../src/PcLogger.Core/dashboard/i18n.js');
+
+Render.use(I18n);
 
 test('formats durations in hours and minutes', () => {
+  I18n.set('ru');
   assert.equal(Render.fmtDuration(0), '0 м');
   assert.equal(Render.fmtDuration(59), '0 м');
   assert.equal(Render.fmtDuration(60), '1 м');
   assert.equal(Render.fmtDuration(45 * 60), '45 м');
   assert.equal(Render.fmtDuration(60 * 60), '1 ч 00 м');
   assert.equal(Render.fmtDuration(2 * 3600 + 35 * 60), '2 ч 35 м');
+});
+
+test('formats durations in English without a space before the unit', () => {
+  I18n.set('en');
+  assert.equal(Render.fmtDuration(0), '0m');
+  assert.equal(Render.fmtDuration(45 * 60), '45m');
+  assert.equal(Render.fmtDuration(60 * 60), '1h 00m');
+  assert.equal(Render.fmtDuration(2 * 3600 + 35 * 60), '2h 35m');
 });
 
 test('positions an item as a percentage of the window', () => {
@@ -106,9 +118,13 @@ test('the clock follows the offset across a day boundary', () => {
   assert.equal(Render.clock(1757606400, -300), '11:00');
 });
 
-test('the weekday is the local one, in short Russian', () => {
+test('names the weekday in the current language', () => {
+  I18n.set('ru');
   assert.equal(Render.weekday(1757606400, 180), 'чт');
   assert.equal(Render.weekday(1757606400 + 86400, 180), 'пт');
+  I18n.set('en');
+  assert.equal(Render.weekday(1757606400, 180), 'Thu');
+  assert.equal(Render.weekday(1757606400 + 86400, 180), 'Fri');
 });
 
 test('a moment inside an item finds it', () => {
