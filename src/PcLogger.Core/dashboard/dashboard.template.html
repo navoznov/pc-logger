@@ -253,7 +253,14 @@ Render.use(I18n);
 // built: the report is a file you open, and its language belongs with the theme switch
 // rather than with the collector's configuration.
 const LANG_KEY = 'pclogger.lang';
-I18n.set(localStorage.getItem(LANG_KEY) || DATA.lang);
+
+// Reading localStorage THROWS, not returns null, when the browser blocks site data. This
+// line runs at the top of the script that wires the whole page, so an uncaught SecurityError
+// there costs the reader the entire report rather than just their remembered language.
+function storedLang() { try { return localStorage.getItem(LANG_KEY); } catch (e) { return null; } }
+function storeLang(value) { try { localStorage.setItem(LANG_KEY, value); } catch (e) { /* storage blocked; the choice just will not survive a reload */ } }
+
+I18n.set(storedLang() || DATA.lang);
 
 function applyLang() {
   document.documentElement.lang = I18n.lang();
@@ -274,7 +281,7 @@ function fillLangPicker() {
   picker.value = I18n.lang();
   picker.addEventListener('change', function () {
     I18n.set(picker.value);
-    localStorage.setItem(LANG_KEY, I18n.lang());
+    storeLang(I18n.lang());
     applyLang();
   });
 }
