@@ -4,8 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { I18n } = require('../../src/PcLogger.Core/dashboard/i18n.js');
 
-const TEMPLATE = fs.readFileSync(
-  path.join(__dirname, '../../src/PcLogger.Core/dashboard/dashboard.template.html'), 'utf8');
+const DASHBOARD = path.join(__dirname, '../../src/PcLogger.Core/dashboard');
+const TEMPLATE = fs.readFileSync(path.join(DASHBOARD, 'dashboard.template.html'), 'utf8');
+const SOURCES = ['dashboard.template.html', 'render.js', 'regime.js', 'selection.js'];
+const ALL_SOURCE = SOURCES
+  .map(function (name) { return fs.readFileSync(path.join(DASHBOARD, name), 'utf8'); })
+  .join('\n');
 
 test('falls back to English and then to the key itself', () => {
   I18n.set('ru');
@@ -56,4 +60,33 @@ test('every key marked up in the template exists in the dictionary', () => {
   for (const key of keys) {
     assert.ok(key in I18n.DICTS.en, 'template key missing from the dictionary: ' + key);
   }
+});
+
+test('no key in the dictionary is dead', () => {
+  for (const key of Object.keys(I18n.DICTS.en)) {
+    if (key.charAt(0) === '$') continue;   // read by the switcher, never by t()
+    assert.ok(ALL_SOURCE.includes("'" + key + "'") || ALL_SOURCE.includes('"' + key + '"'),
+      'dictionary key used nowhere: ' + key);
+  }
+});
+
+test('no Russian text is hard-coded outside the dictionary', () => {
+  for (const name of SOURCES) {
+    const offenders = fs.readFileSync(path.join(DASHBOARD, name), 'utf8')
+      .split('\n')
+      .map(function (line, index) { return [index + 1, line]; })
+      .filter(function (pair) { return /[А-Яа-яЁё]/.test(pair[1]); });
+    assert.deepEqual(offenders, [], name + ' still carries Russian outside i18n.js');
+  }
+});
+
+test('every key passed to t() as a literal exists in the dictionary', () => {
+  const pattern = /I18n\.t\(\s*'([^']+)'/g;
+  let match;
+  let seen = 0;
+  while ((match = pattern.exec(ALL_SOURCE)) !== null) {
+    seen++;
+    assert.ok(match[1] in I18n.DICTS.en, 't() called with an unknown key: ' + match[1]);
+  }
+  assert.ok(seen > 20, 'the scan found almost no t() calls — the regex has drifted');
 });

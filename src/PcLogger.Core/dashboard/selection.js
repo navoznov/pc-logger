@@ -19,7 +19,7 @@
 
     // Intersected with presence on purpose. A game can hold the foreground while nobody is
     // at the keyboard, so a plain sum of fg spans can exceed the time spent at the PC, and a
-    // panel that prints "За ПК 23 %" above "Игра в фокусе 45 %" reads as broken. The game
+    // panel that prints "At the PC 23 %" above "Game in focus 45 %" reads as broken. The game
     // TRACK still shows the physical fact; this is the answer to a different question — how
     // much of the child's time at the PC went into a game.
     const activeSpans = spans.filter(s => s.s === 'active');
