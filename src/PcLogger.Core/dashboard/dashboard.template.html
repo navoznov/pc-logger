@@ -85,9 +85,16 @@
   tr.pick { cursor: pointer; }
   tr.pick:hover td { background: var(--bg); }
   .heat-row, .bar { cursor: pointer; }
-  .axis { display: flex; margin-left: 106px; color: var(--muted); font-size: 11px;
-          border-top: 1px solid var(--line); padding-top: 4px; }
-  .axis span { flex: 1; min-width: 0; }
+  /* Absolutely positioned rather than laid out in equal flex cells: once the window can be
+     zoomed, the labels no longer divide it evenly and each one has to sit at its own moment,
+     in the same coordinate space as the grid line under it. */
+  .axis { position: relative; height: 21px; margin-left: 106px; color: var(--muted);
+          font-size: 11px; border-top: 1px solid var(--line); }
+  .axis span { position: absolute; top: 4px; white-space: nowrap; }
+  .zoom { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+  .zoom span { margin-right: auto; color: var(--muted); font-size: 12px; }
+  .zoom button { padding: 2px 9px; }
+  .zoom button:disabled { opacity: .45; cursor: default; }
   @media (max-width: 700px) { .axis span.dense { display: none; } }
   /* Same 106px gutter as .axis: 96px label + 10px gap. The histogram claims to share the
      tracks' clock, and starting it at the card edge stretched the same 24 hours over a wider
@@ -158,6 +165,12 @@
     <div class="kpis" id="kpis"></div>
 
     <div class="tracks">
+      <div class="zoom">
+        <span>Ctrl/⌘+колесо — приблизить к курсору; колесо, Shift+колесо или свайп — сдвинуть</span>
+        <button id="zoomOut" title="Отдалить: показать промежуток вдвое длиннее">−</button>
+        <button id="zoomIn" title="Приблизить: показать промежуток вдвое короче">+</button>
+        <button id="zoomAll" title="Вернуть ленту к целым суткам">Весь день</button>
+      </div>
       <div class="tracks-body" id="tracksBody">
         <div class="track-row"><div class="track-name" title="Были ли вообще записи. Пусто означает, что компьютер был выключен или спал, а не что за ним никого не было.">ПК включён</div><div class="track" id="tPower"></div></div>
         <div class="track-row"><div class="track-name" title="Был ли ввод с клавиатуры, мыши или геймпада. Отсутствие ввода при включённом ПК читается как «отошёл».">Активность</div><div class="track" id="tActive"></div></div>
@@ -234,7 +247,11 @@ const COLORS = { ok: 'var(--ok)', over: 'var(--over)', short: 'var(--short)',
 const SELECTION_PROMPT =
   'Выдели участок на дорожке или на строке недели, чтобы увидеть статистику за период.';
 
-let view = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes);
+// `day` is what the report COUNTS — the KPIs, the block table and the regime verdict are
+// always the whole day. `view` is only what the lane SHOWS, and zooming moves nothing but it:
+// a number that quietly changed with the wheel would stop meaning «за день».
+let day = Render.dayBounds(DATA.generated, DATA.tz_offset_minutes);
+let view = { from: day.from, to: day.to };
 let regimeCache = null;
 let selected = null;
 let dayRange = { first: 0, last: 0 };
@@ -270,17 +287,18 @@ function fillDayPicker() {
     first: picker.options.length ? Number(picker.options[picker.options.length - 1].value) : last,
     last: last
   };
-  picker.value = view.from;
+  picker.value = day.from;
 }
 
 // Walking past the newest day used to leave the picker on no option at all: the header showed
 // no date, everything rendered zeroes, and the only way back was an unknown number of clicks.
 function goToDay(from) {
-  const day = Math.min(dayRange.last, Math.max(dayRange.first, from));
-  view = { from: day, to: day + 86400 };
-  document.getElementById('day').value = day;
-  document.getElementById('prev').disabled = day <= dayRange.first;
-  document.getElementById('next').disabled = day >= dayRange.last;
+  const start = Math.min(dayRange.last, Math.max(dayRange.first, from));
+  day = { from: start, to: start + 86400 };
+  view = { from: day.from, to: day.to };
+  document.getElementById('day').value = start;
+  document.getElementById('prev').disabled = start <= dayRange.first;
+  document.getElementById('next').disabled = start >= dayRange.last;
   selected = null;
   redraw();
 }
@@ -291,16 +309,20 @@ function segClass(item) {
   return item.verdict === 'over' ? 'seg over' : 'seg';
 }
 
-// What each track currently shows, in paint order and already clipped to the day: an
-// unclipped duration on a segment the window cut in half is a number the user cannot
-// reconcile with what they see.
+// What each track currently shows, in paint order and clipped to the day — to the DAY, not to
+// the zoom window. An unclipped duration on a segment midnight cut in half is a number the
+// user cannot reconcile with what they see; but the zoom is not a boundary in the data, and
+// clipping to it would tell a reader who zoomed into the middle of a block that the block is
+// exactly as long as his screen, in plain contradiction of the block table.
 const painted = { tPower: [], tActive: [], tGame: [], tRegime: [] };
 
 function paint(trackId, boxes, color) {
   const track = document.getElementById(trackId);
   track.innerHTML = '';
   painted[trackId] = boxes.map(function (box) {
-    return { t: box.start, d: box.end - box.start, item: box.item };
+    const from = Math.max(box.item.t, day.from);
+    const to = Math.min(box.item.t + box.item.d, day.to);
+    return { t: from, d: to - from, item: box.item };
   });
   boxes.forEach(function (box) {
     const div = document.createElement('div');
@@ -360,31 +382,37 @@ function describeAt(zoneId, hit, t) {
   return { what: name + ' · ' + what, when: when };
 }
 
-// Built once: the hour grid and the selection band are percentages of the day, so they survive
-// both a repaint and a window resize without being recomputed.
+// Three layers, built once. The grid is refilled on every repaint because it follows the
+// zoom; the band and the cursor line have to survive that refill — the band outlives a
+// repaint by design, so the sliders can be moved without losing the selected evening.
 function buildLane() {
   const lane = document.getElementById('lane');
   lane.innerHTML = '';
-  for (let hour = 3; hour < 24; hour += 3) {
-    const line = document.createElement('div');
-    line.className = 'grid-line';
-    line.style.left = (100 * hour / 24) + '%';
-    lane.appendChild(line);
-  }
-  ['selBand sel-band', 'cursorLine cursor-line'].forEach(function (pair) {
-    const parts = pair.split(' ');
-    const div = document.createElement('div');
-    div.id = parts[0];
-    div.className = parts[1] + ' hidden';
-    lane.appendChild(div);
-  });
+  [['grid', ''], ['selBand', 'sel-band hidden'], ['cursorLine', 'cursor-line hidden']]
+    .forEach(function (pair) {
+      const div = document.createElement('div');
+      div.id = pair[0];
+      div.className = pair[1];
+      lane.appendChild(div);
+    });
+}
+
+function ratioOf(t) {
+  return (t - view.from) / (view.to - view.from);
 }
 
 // Also called when the day view leaves the screen: hiding the tracks fires no mouseleave, so
 // without this the readout hangs over the week view, naming a moment on a lane that is gone.
 function hideCursor() {
-  document.getElementById('tip').classList.add('hidden');
+  hideTip();
   document.getElementById('cursorLine').classList.add('hidden');
+}
+
+// The wheel moves the window under a motionless pointer, and no mousemove follows it. The
+// line still marks where the mouse is, but the text beside it would name a moment that is no
+// longer there, so the text goes and comes back on the first pixel of movement.
+function hideTip() {
+  document.getElementById('tip').classList.add('hidden');
 }
 
 function showBand(from, to) {
@@ -488,7 +516,7 @@ function drawIntensity() {
 function drawHealth() {
   const banner = document.getElementById('health');
   const errors = (DATA.events || []).filter(function (e) {
-    return e.kind === 'error' && e.t >= view.from && e.t < view.to;
+    return e.kind === 'error' && e.t >= day.from && e.t < day.to;
   });
 
   banner.classList.toggle('hidden', errors.length === 0);
@@ -507,16 +535,35 @@ function drawEmpty(spans) {
     'работала. Пустые дорожки ниже не означают, что за ПК никого не было.';
 }
 
-function drawAxis() {
+// The axis and the grid read one tick list, so a label and the line under it can never
+// disagree. Before the zoom they were two independent lists of hard-coded hours.
+function drawAxis(ticks) {
   const axis = document.getElementById('axis');
   axis.innerHTML = '';
-  for (let hour = 0; hour < 24; hour += 3) {
+  ticks.forEach(function (t, index) {
+    // A zoomed window rarely starts on a round minute, so the last tick can land almost on
+    // the right edge, where its label would hang off the card.
+    if (ratioOf(t) > 0.93) return;
     const span = document.createElement('span');
-    span.textContent = String(hour).padStart(2, '0') + ':00';
-    // Eight labels have no room on a phone and butt into each other; CSS drops these four.
-    if (hour % 6 !== 0) span.className = 'dense';
+    span.textContent = clockOf(t);
+    span.style.left = (100 * ratioOf(t)) + '%';
+    // Eight labels have no room on a phone and butt into each other; CSS drops every second.
+    if (index % 2 === 1) span.className = 'dense';
     axis.appendChild(span);
-  }
+  });
+}
+
+function drawGrid(ticks) {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  ticks.forEach(function (t) {
+    // A line on the window's own left edge is the track's border drawn twice.
+    if (ratioOf(t) < 0.005) return;
+    const line = document.createElement('div');
+    line.className = 'grid-line';
+    line.style.left = (100 * ratioOf(t)) + '%';
+    grid.appendChild(line);
+  });
 }
 
 function drawKpis(blocks, gaps, stats) {
@@ -607,7 +654,7 @@ function drawBlocksTable(blocks, gaps) {
 // unlabelled colour, and app_spans was payload nobody read.
 function drawGamesOfDay() {
   const panel = document.getElementById('games');
-  const totals = topBy(DATA.game_spans, view.from, view.to,
+  const totals = topBy(DATA.game_spans, day.from, day.to,
                        function (s) { return s.lvl === 'fg'; });
 
   panel.innerHTML = '';
@@ -684,14 +731,17 @@ function enableBrush(trackId) {
   });
 }
 
-function draw() {
-  if (selected) showSelection(selected.from, selected.to);
-  else clearSelection();
-
+// Everything the zoom is allowed to change, and nothing else. Kept apart from draw() so a
+// wheel notch repaints four tracks and an axis instead of rebuilding the block table under
+// the pointer — and so that no day-wide number can accidentally start following the window.
+function drawWindow() {
   const spans = DATA.spans.filter(function (s) {
     return s.t + s.d > view.from && s.t < view.to;
   });
-  const result = regimeIn(view.from, view.to);
+  // Built over the whole DAY, then clipped by layout. Asking for the blocks inside the window
+  // would drop any block that started to the left of it — blocksIn selects by start — and
+  // zooming into the middle of an evening would empty the regime track.
+  const result = regimeIn(day.from, day.to);
 
   paint('tPower', Render.layout(spans.filter(function (s) { return s.s !== 'off'; }), view.from, view.to),
         function () { return 'var(--ok)'; });
@@ -709,13 +759,90 @@ function draw() {
   paint('tRegime', Render.layout(regimeItems, view.from, view.to),
         function (item) { return item.s === 'off' ? 'var(--offc)' : COLORS[item.verdict || item.kind]; });
 
+  const ticks = Render.ticks(view.from, view.to, day.from);
+  drawAxis(ticks);
+  drawGrid(ticks);
+  drawIntensity();
+  // The band is stored in absolute time and clipped to the window, so a selection made at one
+  // zoom level keeps pointing at the same evening at another.
+  if (selected) showBand(selected.from, selected.to);
+
+  const width = view.to - view.from;
+  const whole = width >= day.to - day.from;
+  document.getElementById('zoomIn').disabled = width <= Render.MIN_WINDOW;
+  document.getElementById('zoomOut').disabled = whole;
+  document.getElementById('zoomAll').disabled = whole;
+}
+
+// The lane takes the wheel only when it can answer it. Ctrl — ⌘ on a Mac, and also what the
+// browser reports for a trackpad pinch — zooms at the cursor; a plain wheel or a two-finger
+// horizontal swipe, Shift+wheel included, slides the window. A slide the lane cannot use —
+// the whole day is already on screen, or the window is against midnight — is handed back to
+// the page: otherwise the scroll would freeze whenever the pointer crossed the tracks.
+function enableWheelZoom() {
+  const body = document.getElementById('tracksBody');
+
+  body.addEventListener('wheel', function (event) {
+    const zone = event.target.closest('.track') || event.target.closest('#intensity');
+    if (!zone) return;
+
+    const rect = zone.getBoundingClientRect();
+    const width = view.to - view.from;
+
+    if (event.ctrlKey || event.metaKey) {
+      // Consumed whether or not the limits allow a step: the alternative is the browser
+      // zooming the whole page in the middle of a gesture aimed at the timeline.
+      event.preventDefault();
+      const pixels = Render.wheelPixels(event.deltaY, event.deltaMode, rect.height);
+      const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+      // A mouse notch of about 100 px is one quarter step; a pinch arrives as many small
+      // deltas and climbs the same curve, which is why the magnitude is read and not the sign.
+      view = Render.zoom(view, view.from + ratio * width, Math.pow(1.25, pixels / 100), day);
+    } else {
+      const pixels = Render.wheelPixels(Render.wheelAxis(event.deltaX, event.deltaY),
+                                        event.deltaMode, rect.width);
+      // The window follows the finger: a swipe across the whole lane moves it by its own width.
+      const moved = Render.pan(view, (pixels / rect.width) * width, day);
+      if (moved.from === view.from) return;
+      event.preventDefault();
+      view = moved;
+    }
+
+    hideTip();
+    drawWindow();
+  }, { passive: false });
+}
+
+// The buttons have no cursor to zoom at, so they work from the middle of the window.
+function zoomBy(factor) {
+  view = Render.zoom(view, (view.from + view.to) / 2, factor, day);
+  hideCursor();
+  drawWindow();
+}
+
+document.getElementById('zoomIn').addEventListener('click', function () { zoomBy(0.5); });
+document.getElementById('zoomOut').addEventListener('click', function () { zoomBy(2); });
+document.getElementById('zoomAll').addEventListener('click', function () {
+  view = { from: day.from, to: day.to };
+  hideCursor();
+  drawWindow();
+});
+
+function draw() {
+  if (selected) showSelection(selected.from, selected.to);
+  else clearSelection();
+
+  const spans = DATA.spans.filter(function (s) {
+    return s.t + s.d > day.from && s.t < day.to;
+  });
+  const result = regimeIn(day.from, day.to);
+
   drawHealth();
   drawEmpty(spans);
-  drawAxis();
-  drawIntensity();
-  drawKpis(result.blocks, result.gaps, Selection.stats(spans, DATA.game_spans, view.from, view.to));
+  drawKpis(result.blocks, result.gaps, Selection.stats(spans, DATA.game_spans, day.from, day.to));
   drawBlocksTable(result.blocks, result.gaps);
   drawGamesOfDay();
+  drawWindow();
 }
 
 const SLIDERS = {
@@ -762,16 +889,16 @@ function navStep() {
   return weekShown() ? WEEK_DAYS * 86400 : 86400;
 }
 
-document.getElementById('prev').addEventListener('click', function () { goToDay(view.from - navStep()); });
-document.getElementById('next').addEventListener('click', function () { goToDay(view.from + navStep()); });
+document.getElementById('prev').addEventListener('click', function () { goToDay(day.from - navStep()); });
+document.getElementById('next').addEventListener('click', function () { goToDay(day.from + navStep()); });
 
 document.addEventListener('keydown', function (event) {
   // The sliders and the date picker own the arrows while they have focus, and moving a
   // threshold and the day at once is nobody's intention.
   const tag = (event.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
-  if (event.key === 'ArrowLeft') goToDay(view.from - navStep());
-  else if (event.key === 'ArrowRight') goToDay(view.from + navStep());
+  if (event.key === 'ArrowLeft') goToDay(day.from - navStep());
+  else if (event.key === 'ArrowRight') goToDay(day.from + navStep());
   else return;
   event.preventDefault();
 });
@@ -794,7 +921,7 @@ function dayLabel(ts) {
 }
 
 function drawWeek() {
-  const rows = Render.weekMatrix(DATA.spans, view.from, WEEK_DAYS, WEEK_SLOT_MINUTES);
+  const rows = Render.weekMatrix(DATA.spans, day.from, WEEK_DAYS, WEEK_SLOT_MINUTES);
 
   let axis = '';
   for (let hour = 0; hour < 24; hour += 3) {
@@ -942,12 +1069,13 @@ function enableHeatBrush() {
 
 ['tPower', 'tActive', 'tGame', 'tRegime'].forEach(enableBrush);
 enableHeatBrush();
+enableWheelZoom();
 buildLane();
 enableCursorReadout();
 applyMode(false);
 fillDayPicker();
-document.getElementById('prev').disabled = view.from <= dayRange.first;
-document.getElementById('next').disabled = view.from >= dayRange.last;
+document.getElementById('prev').disabled = day.from <= dayRange.first;
+document.getElementById('next').disabled = day.from >= dayRange.last;
 draw();
 </script>
 </body>

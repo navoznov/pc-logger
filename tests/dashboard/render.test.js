@@ -139,3 +139,111 @@ test('overlapping items resolve to the one painted last', () => {
 
   assert.equal(Render.itemAt([under, over], 25), over);
 });
+
+const DAY = { from: 0, to: 86400 };
+
+test('zooming in halves the window around the cursor', () => {
+  const view = Render.zoom({ from: 0, to: 86400 }, 43200, 0.5, DAY);
+
+  assert.deepEqual(view, { from: 21600, to: 64800 });
+});
+
+// The whole point of zooming at the cursor: whatever the eye was on stays under the pointer.
+test('the moment under the cursor keeps its place in the window', () => {
+  const view = Render.zoom({ from: 0, to: 86400 }, 21600, 0.5, DAY);
+
+  assert.equal((21600 - view.from) / (view.to - view.from), 0.25);
+});
+
+test('zooming out at the day edge shifts the window instead of running past it', () => {
+  const view = Render.zoom({ from: 0, to: 3600 }, 3600, 2, DAY);
+
+  assert.deepEqual(view, { from: 0, to: 7200 });
+});
+
+test('zooming out never grows past the day', () => {
+  assert.deepEqual(Render.zoom({ from: 0, to: 86400 }, 43200, 2, DAY), DAY);
+});
+
+// Buckets are ten seconds and the histogram is per minute: below ten minutes there is
+// nothing left to reveal, only empty stretching.
+test('zooming in stops at the minimum window', () => {
+  const view = Render.zoom({ from: 0, to: 1200 }, 600, 0.25, DAY);
+
+  assert.deepEqual(view, { from: 300, to: 900 });
+});
+
+test('panning moves the window without changing its width', () => {
+  assert.deepEqual(Render.pan({ from: 3600, to: 7200 }, 1800, DAY),
+                   { from: 5400, to: 9000 });
+});
+
+test('panning stops at the day edges and keeps the width', () => {
+  assert.deepEqual(Render.pan({ from: 0, to: 3600 }, -1800, DAY), { from: 0, to: 3600 });
+  assert.deepEqual(Render.pan({ from: 82800, to: 86400 }, 1800, DAY),
+                   { from: 82800, to: 86400 });
+});
+
+test('a full day is labelled every three hours, as it always was', () => {
+  const ticks = Render.ticks(0, 86400, 0);
+
+  assert.equal(ticks.length, 8);
+  assert.deepEqual(ticks.slice(0, 3), [0, 10800, 21600]);
+});
+
+test('a one-hour window is labelled every ten minutes', () => {
+  assert.deepEqual(Render.ticks(0, 3600, 0),
+                   [0, 600, 1200, 1800, 2400, 3000]);
+});
+
+// Aligned to the day, not to the window: a zoomed axis still has to read 08:30, never 08:27.
+test('ticks land on round clock times whatever the window edges are', () => {
+  const ticks = Render.ticks(1000, 4600, 0);
+
+  assert.equal(ticks[0], 1200);
+  assert.ok(ticks.every(t => t % 600 === 0));
+  assert.ok(ticks[ticks.length - 1] < 4600);
+});
+
+test('the tightest window is still labelled, and never with more than ten labels', () => {
+  [600, 1800, 3600, 10800, 21600, 43200, 86400].forEach(width => {
+    const ticks = Render.ticks(0, width, 0);
+    assert.ok(ticks.length >= 4 && ticks.length <= 10,
+              width + ' s window produced ' + ticks.length + ' labels');
+  });
+});
+
+// Firefox reports a mouse notch in LINES and some browsers in PAGES, so a handler that reads
+// the number as pixels moves the lane by three pixels per notch on one browser and by a whole
+// day on another. Only the sign is safe without this.
+test('a wheel delta in pixels is taken as it is', () => {
+  assert.equal(Render.wheelPixels(120, 0, 990), 120);
+  assert.equal(Render.wheelPixels(-120, 0, 990), -120);
+});
+
+test('a wheel delta in lines becomes pixels', () => {
+  assert.equal(Render.wheelPixels(3, 1, 990), 48);
+  assert.equal(Render.wheelPixels(-3, 1, 990), -48);
+});
+
+test('a wheel delta in pages becomes the width of what it scrolls', () => {
+  assert.equal(Render.wheelPixels(1, 2, 990), 990);
+});
+
+// Shift+wheel is delivered as a HORIZONTAL delta by some browsers and as a vertical one with
+// a modifier by others, and a two-finger swipe is horizontal outright. Reading whichever axis
+// actually moved is what makes one branch answer all three.
+test('the axis that moved is the one that scrolls the lane', () => {
+  assert.equal(Render.wheelAxis(120, 0), 120);
+  assert.equal(Render.wheelAxis(0, 120), 120);
+  assert.equal(Render.wheelAxis(-120, 0), -120);
+});
+
+test('a diagonal swipe follows its longer side', () => {
+  assert.equal(Render.wheelAxis(5, -120), -120);
+  assert.equal(Render.wheelAxis(-120, 5), -120);
+});
+
+test('a wheel that moved on neither axis scrolls nothing', () => {
+  assert.equal(Render.wheelAxis(0, 0), 0);
+});
