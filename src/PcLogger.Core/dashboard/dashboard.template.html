@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -141,23 +141,23 @@
 <div class="wrap">
   <header>
     <h1>PC Logger</h1>
-    <button id="prev" title="Предыдущий день" aria-label="Предыдущий день">←</button>
-    <select id="day" title="Выбрать день" aria-label="Выбрать день"></select>
-    <button id="next" title="Следующий день" aria-label="Следующий день">→</button>
-    <button id="mode" title="Переключить между лентой одного дня и сводкой за семь дней">Неделя</button>
-    <button id="theme" title="Светлая или тёмная тема. По умолчанию отчёт следует настройке системы.">Тема</button>
+    <button id="prev" data-i18n-title="nav.prevDay" data-i18n-aria="nav.prevDay">←</button>
+    <select id="day" data-i18n-title="nav.pickDay" data-i18n-aria="nav.pickDay"></select>
+    <button id="next" data-i18n-title="nav.nextDay" data-i18n-aria="nav.nextDay">→</button>
+    <button id="mode" data-i18n-title="nav.mode.tip"></button>
+    <button id="theme" data-i18n="nav.theme" data-i18n-title="nav.theme.tip"></button>
   </header>
 
   <div class="sliders">
-    <label title="Сколько минут подряд за ПК считается нормальным блоком. Блок длиннее этого порога плюс допуска помечается превышением.">Блок, мин <input type="range" id="session" min="5" max="60" step="5"><b id="sessionV"></b></label>
-    <label title="Пауза такой длины и больше закрывает блок и засчитывается как полноценный перерыв.">Перерыв, мин <input type="range" id="break" min="5" max="60" step="5"><b id="breakV"></b></label>
-    <label title="Пауза короче этой поглощается блоком: отойти налить чай — не перерыв, а часть работы за ПК.">Микропауза, мин <input type="range" id="micro" min="1" max="10" step="1"><b id="microV"></b></label>
-    <label title="Сколько минут сверх блока прощается, прежде чем вердикт станет «превышение».">Допуск, мин <input type="range" id="tol" min="0" max="10" step="1"><b id="tolV"></b></label>
-    <label title="Дневная норма экранного времени. Рисуется пунктиром на столбиках недели, на вердикт по блокам не влияет.">Норма в день, ч <input type="range" id="norm" min="1" max="8" step="1"><b id="normV"></b></label>
-    <button id="resetOpts" title="Вернуть все пять порогов к значениям по умолчанию">Сбросить пороги</button>
+    <label data-i18n-title="opt.session.tip"><span data-i18n="opt.session.label"></span> <input type="range" id="session" min="5" max="60" step="5"><b id="sessionV"></b></label>
+    <label data-i18n-title="opt.break.tip"><span data-i18n="opt.break.label"></span> <input type="range" id="break" min="5" max="60" step="5"><b id="breakV"></b></label>
+    <label data-i18n-title="opt.micro.tip"><span data-i18n="opt.micro.label"></span> <input type="range" id="micro" min="1" max="10" step="1"><b id="microV"></b></label>
+    <label data-i18n-title="opt.tol.tip"><span data-i18n="opt.tol.label"></span> <input type="range" id="tol" min="0" max="10" step="1"><b id="tolV"></b></label>
+    <label data-i18n-title="opt.norm.tip"><span data-i18n="opt.norm.label"></span> <input type="range" id="norm" min="1" max="8" step="1"><b id="normV"></b></label>
+    <button id="resetOpts" data-i18n="opt.reset" data-i18n-title="opt.reset.tip"></button>
   </div>
 
-  <div class="panel" id="selection" title="Числа считаются от полной длины выделения и не зависят от слайдеров порогов">Выдели участок на дорожке или на строке недели, чтобы увидеть статистику за период.</div>
+  <div class="panel" id="selection" data-i18n-title="sel.tip"></div>
 
   <section id="dayView">
     <div class="panel warn hidden" id="health"></div>
@@ -166,31 +166,42 @@
 
     <div class="tracks">
       <div class="zoom">
-        <span>Ctrl/⌘+колесо — приблизить к курсору; колесо, Shift+колесо или свайп — сдвинуть</span>
-        <button id="zoomOut" title="Отдалить: показать промежуток вдвое длиннее">−</button>
-        <button id="zoomIn" title="Приблизить: показать промежуток вдвое короче">+</button>
-        <button id="zoomAll" title="Вернуть ленту к целым суткам">Весь день</button>
+        <span data-i18n="zoom.hint"></span>
+        <button id="zoomOut" data-i18n-title="zoom.out.tip">−</button>
+        <button id="zoomIn" data-i18n-title="zoom.in.tip">+</button>
+        <button id="zoomAll" data-i18n="zoom.all" data-i18n-title="zoom.all.tip"></button>
       </div>
       <div class="tracks-body" id="tracksBody">
-        <div class="track-row"><div class="track-name" title="Были ли вообще записи. Пусто означает, что компьютер был выключен или спал, а не что за ним никого не было.">ПК включён</div><div class="track" id="tPower"></div></div>
-        <div class="track-row"><div class="track-name" title="Был ли ввод с клавиатуры, мыши или геймпада. Отсутствие ввода при включённом ПК читается как «отошёл».">Активность</div><div class="track" id="tActive"></div></div>
-        <div class="track-row"><div class="track-name" title="Игра из папок в config.json: в фокусе или запущена в фоне. На вердикт по режиму не влияет никогда.">Игра</div><div class="track" id="tGame"></div></div>
-        <div class="track-row"><div class="track-name" title="Единственная дорожка-интерпретация: блоки, перерывы и вердикт. Перекрашивается слайдерами порогов.">Режим</div><div class="track" id="tRegime"></div></div>
+        <div class="track-row"><div class="track-name" data-i18n="track.power.name"
+             data-i18n-title="track.power.tip"></div><div class="track" id="tPower"></div></div>
+        <div class="track-row"><div class="track-name" data-i18n="track.active.name"
+             data-i18n-title="track.active.tip"></div><div class="track" id="tActive"></div></div>
+        <div class="track-row"><div class="track-name" data-i18n="track.game.name"
+             data-i18n-title="track.game.tip"></div><div class="track" id="tGame"></div></div>
+        <div class="track-row"><div class="track-name" data-i18n="track.regime.name"
+             data-i18n-title="track.regime.tip"></div><div class="track" id="tRegime"></div></div>
         <div class="axis" id="axis"></div>
         <svg id="intensity" preserveAspectRatio="none"></svg>
         <div class="lane" id="lane"></div>
       </div>
       <!-- Outside the lane overlay on purpose: the hour grid would otherwise be drawn
            straight through this line of text. -->
-      <div class="bars-scale">интенсивность ввода — доля секунд с вводом в минуте</div>
+      <div class="bars-scale" data-i18n="bars.scale"></div>
       <div class="legend">
-        <span title="Блок за ПК не длиннее порога «блок» плюс допуска"><i class="dot" style="background:var(--ok)"></i>в пределах нормы</span>
-        <span title="Блок за ПК длиннее порога: помечен и цветом, и штриховкой"><i class="dot" style="background:var(--over)"></i>превышение</span>
-        <span title="Пауза длиннее микропаузы, но короче порога перерыва: блок не закрывает"><i class="dot" style="background:var(--short)"></i>недостаточный перерыв</span>
-        <span title="Пауза не короче порога перерыва: блок закрыт, отдых засчитан"><i class="dot rest-dot"></i>перерыв</span>
-        <span title="Записей нет: компьютер был выключен или спал"><i class="dot off-dot"></i>ПК выключен</span>
-        <span title="Окно игры было на переднем плане"><i class="dot" style="background:var(--game-fg)"></i>игра в фокусе</span>
-        <span title="Игра запущена, но в фокусе было другое окно"><i class="dot" style="background:var(--game-bg)"></i>игра в фоне</span>
+        <span data-i18n-title="legend.ok.tip"><i class="dot" style="background:var(--ok)"></i><span
+              data-i18n="legend.ok"></span></span>
+        <span data-i18n-title="legend.over.tip"><i class="dot" style="background:var(--over)"></i><span
+              data-i18n="legend.over"></span></span>
+        <span data-i18n-title="legend.short.tip"><i class="dot" style="background:var(--short)"></i><span
+              data-i18n="legend.short"></span></span>
+        <span data-i18n-title="legend.break.tip"><i class="dot rest-dot"></i><span
+              data-i18n="legend.break"></span></span>
+        <span data-i18n-title="legend.off.tip"><i class="dot off-dot"></i><span
+              data-i18n="legend.off"></span></span>
+        <span data-i18n-title="legend.gameFg.tip"><i class="dot" style="background:var(--game-fg)"></i><span
+              data-i18n="legend.gameFg"></span></span>
+        <span data-i18n-title="legend.gameBg.tip"><i class="dot" style="background:var(--game-bg)"></i><span
+              data-i18n="legend.gameBg"></span></span>
       </div>
     </div>
 
@@ -199,12 +210,12 @@
     <div class="panel scroll-x">
       <table>
         <thead><tr>
-          <th title="Когда начался блок">Начало</th>
-          <th title="От начала блока до его конца, вместе с поглощёнными паузами">Длительность</th>
-          <th title="Только минуты с вводом внутри блока: длительность минус паузы">Экранное время</th>
-          <th title="Пауза сразу после блока. Прочерк означает, что блок последний за день.">Перерыв после</th>
-          <th title="Приложение, продержавшее фокус дольше всех внутри блока">Топ-приложение</th>
-          <th title="«Превышение», если блок длиннее порога «блок» плюс допуска">Вердикт</th>
+          <th data-i18n="table.start" data-i18n-title="table.start.tip"></th>
+          <th data-i18n="table.duration" data-i18n-title="table.duration.tip"></th>
+          <th data-i18n="table.screen" data-i18n-title="table.screen.tip"></th>
+          <th data-i18n="table.breakAfter" data-i18n-title="table.breakAfter.tip"></th>
+          <th data-i18n="table.topApp" data-i18n-title="table.topApp.tip"></th>
+          <th data-i18n="table.verdict" data-i18n-title="table.verdict.tip"></th>
         </tr></thead>
         <tbody id="blocks"></tbody>
       </table>
@@ -219,17 +230,23 @@
       <div class="bars" id="bars"></div>
       <div class="bar-labels" id="barLabels"></div>
       <div class="legend">
-        <span><i class="dot" style="background:var(--game-fg)"></i>экранное время за день</span>
-        <span><i class="dot" style="background:var(--over)"></i>день с нарушениями</span>
+        <span><i class="dot" style="background:var(--game-fg)"></i><span
+              data-i18n="week.legend.screen"></span></span>
+        <span><i class="dot" style="background:var(--over)"></i><span
+              data-i18n="week.legend.violations"></span></span>
       </div>
     </div>
   </section>
 </div>
 
+<script src="i18n.js"></script>
 <script src="regime.js"></script>
 <script src="selection.js"></script>
 <script src="render.js"></script>
 <script>
+Render.use(I18n);
+I18n.set('ru');
+
 const DATA = /*__DATA__*/;
 
 const opts = {
@@ -1067,12 +1084,26 @@ function enableHeatBrush() {
   });
 }
 
+// The header, the sliders, the legend, the track names and the table head are not repainted
+// by redraw(), so one pass fills them — at startup and again whenever the language changes.
+function applyStatic() {
+  const fill = function (attribute, apply) {
+    document.querySelectorAll('[' + attribute + ']').forEach(function (node) {
+      apply(node, I18n.t(node.getAttribute(attribute)));
+    });
+  };
+  fill('data-i18n', function (node, text) { node.textContent = text; });
+  fill('data-i18n-title', function (node, text) { node.title = text; });
+  fill('data-i18n-aria', function (node, text) { node.setAttribute('aria-label', text); });
+}
+
 ['tPower', 'tActive', 'tGame', 'tRegime'].forEach(enableBrush);
 enableHeatBrush();
 enableWheelZoom();
 buildLane();
 enableCursorReadout();
 applyMode(false);
+applyStatic();
 fillDayPicker();
 document.getElementById('prev').disabled = day.from <= dayRange.first;
 document.getElementById('next').disabled = day.from >= dayRange.last;

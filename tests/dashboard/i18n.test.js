@@ -1,6 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
 const { I18n } = require('../../src/PcLogger.Core/dashboard/i18n.js');
+
+const TEMPLATE = fs.readFileSync(
+  path.join(__dirname, '../../src/PcLogger.Core/dashboard/dashboard.template.html'), 'utf8');
 
 test('falls back to English and then to the key itself', () => {
   I18n.set('ru');
@@ -38,5 +43,17 @@ test('every language names itself for the switcher', () => {
   for (const lang of I18n.langs()) {
     assert.equal(typeof I18n.DICTS[lang].$name, 'string');
     assert.ok(I18n.DICTS[lang].$name.length > 0);
+  }
+});
+
+test('every key marked up in the template exists in the dictionary', () => {
+  const keys = new Set();
+  const pattern = /data-i18n(?:-title|-aria)?="([^"]+)"/g;
+  let match;
+  while ((match = pattern.exec(TEMPLATE)) !== null) keys.add(match[1]);
+
+  assert.ok(keys.size > 0, 'the template carries no data-i18n markup at all');
+  for (const key of keys) {
+    assert.ok(key in I18n.DICTS.en, 'template key missing from the dictionary: ' + key);
   }
 });
