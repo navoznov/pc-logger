@@ -116,7 +116,9 @@ defaults.
 
 The ← and → arrow keys page through days, and in “Week” view, through weeks. Clicking a
 heatmap row or a day's bar opens that day. The “Theme” button switches between light
-and dark, and by default the report follows the system setting.
+and dark, and by default the report follows the system setting. The language picker next
+to it in the header switches the report's language the same way: the choice is remembered
+in that browser, and by default the report opens in whichever language Windows is set to.
 
 ## What counts as a break
 
