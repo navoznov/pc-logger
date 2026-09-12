@@ -61,7 +61,7 @@ test('every key marked up in the template exists in the dictionary', () => {
   let match;
   while ((match = pattern.exec(TEMPLATE)) !== null) keys.add(match[1]);
 
-  assert.ok(keys.size > 0, 'the template carries no data-i18n markup at all');
+  assert.ok(keys.size > 61, 'the data-i18n markup scan found too few keys — it has drifted');
   for (const key of keys) {
     assert.ok(key in I18n.DICTS.en, 'template key missing from the dictionary: ' + key);
   }
