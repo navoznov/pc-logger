@@ -755,16 +755,26 @@ function showSelection(from, to) {
       (stats.ratio === null ? '—' : stats.ratio.toFixed(1) + ' : 1') + '</td></tr></table>';
 }
 
-function enableBrush(trackId) {
-  const track = document.getElementById(trackId);
+// Bound once on the lane's container rather than per track: the axis and the histogram are
+// the same clock as the four tracks, already answer the cursor and the wheel, and a 21px
+// stripe in the middle of the lane that refuses a drag reads as a bug. Delegating also leaves
+// one mouseup on the document instead of one per zone.
+function enableBrush() {
+  const body = document.getElementById('tracksBody');
+  // Every zone spans the same day across the same pixels, but each gets that geometry from
+  // its own rule - the tracks from the flex row, the axis and the histogram from a margin.
+  // Measuring the lane asks the one element the grid, the cursor line and the selection band
+  // are already positioned against, so a drag cannot disagree with what it highlights.
+  const lane = document.getElementById('lane');
 
   const toTime = function (event) {
-    const rect = track.getBoundingClientRect();
+    const rect = lane.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
     return view.from + ratio * (view.to - view.from);
   };
 
-  track.addEventListener('mousedown', function (event) {
+  body.addEventListener('mousedown', function (event) {
+    if (!event.target.closest('.track, #axis, #intensity')) return;  // the label column is not a zone
     event.preventDefault();          // otherwise the drag selects the page text underneath
     brush = toTime(event);
   });
@@ -1131,7 +1141,7 @@ function applyStatic() {
   fill('data-i18n-aria', function (node, text) { node.setAttribute('aria-label', text); });
 }
 
-['tPower', 'tActive', 'tGame', 'tRegime'].forEach(enableBrush);
+enableBrush();
 enableHeatBrush();
 enableWheelZoom();
 buildLane();

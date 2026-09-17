@@ -90,11 +90,12 @@ the time at the cursor and a description of what's under it: which game was in f
 whether there was input, which block this is and what its verdict is. The segment's
 boundaries and length show up there too.
 
-Drag-select any stretch of any track — statistics for the period appear below: time at
-the PC, time away from the PC broken down into “stepped away” and “PC was off”,
-percentages and the ratio. While dragging, a tooltip shows the boundaries and length of
-the selection being made, and the stretch itself is highlighted on the lane. Clicking a
-row in the block table gives the same statistics for that block.
+Drag-select any stretch of the lane — any track, the time axis and the intensity
+histogram all take a drag — and statistics for the period appear below: time at the PC,
+time away from the PC broken down into “stepped away” and “PC was off”, percentages
+and the ratio. While dragging, a tooltip shows the boundaries and length of the
+selection being made, and the stretch itself is highlighted on the lane. Clicking a row
+in the block table gives the same statistics for that block.
 
 Ctrl+wheel (⌘+wheel, or a pinch on the trackpad) zooms the lane in toward the point
 under the cursor. The plain wheel, Shift+wheel and a two-finger horizontal swipe pan
