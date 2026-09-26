@@ -35,6 +35,7 @@
   .wrap { max-width: 1100px; margin: 0 auto; }
   header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
   h1 { font-size: 18px; margin: 0 12px 0 0; font-weight: 600; }
+  #version { color: var(--muted); font-size: 12px; font-weight: 400; }
   /* Pushed to the far end of the header: it switches the look of the page, not the data on
      it, and standing next to the “Week” button it read as another way to change what is shown. */
   #theme { margin-left: auto; }
@@ -140,7 +141,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>PC Logger</h1>
+    <h1>PC Logger <span id="version"></span></h1>
     <button id="prev" data-i18n-title="nav.prevDay" data-i18n-aria="nav.prevDay">←</button>
     <select id="day" data-i18n-title="nav.pickDay" data-i18n-aria="nav.pickDay"></select>
     <button id="next" data-i18n-title="nav.nextDay" data-i18n-aria="nav.nextDay">→</button>
@@ -261,6 +262,7 @@ function storedLang() { try { return localStorage.getItem(LANG_KEY); } catch (e)
 function storeLang(value) { try { localStorage.setItem(LANG_KEY, value); } catch (e) { /* storage blocked; the choice just will not survive a reload */ } }
 
 I18n.set(storedLang() || DATA.lang);
+document.getElementById('version').textContent = DATA.version;
 
 function applyLang() {
   document.documentElement.lang = I18n.lang();

@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- The one place the release number lives. Bump it together with the git tag: the tray
+         menu and the report both read it back from the assembly. -->
+    <Version>0.3.0</Version>
+  </PropertyGroup>
+</Project>

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Win32;
 using PcLogger.App.Win32;
+using PcLogger.Core;
 using PcLogger.Core.Config;
 using PcLogger.Core.Localization;
 using PcLogger.Core.Recording;
@@ -23,6 +24,8 @@ public sealed class TrayApp : ApplicationContext
     public TrayApp(string dataDir)
     {
         _menu = new ContextMenuStrip();
+        _menu.Items.Add(new ToolStripMenuItem($"PC Logger {AppVersion.Current}") { Enabled = false });
+        _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(Strings.Get("tray.report"), null, (_, _) => Guarded(() => OpenReport(dataDir)));
         _menu.Items.Add(Strings.Get("tray.dataFolder"), null, (_, _) => Guarded(() => Open(dataDir)));
         _menu.Items.Add(Strings.Get("tray.gameFolders"), null, (_, _) => Guarded(() => OpenConfig(dataDir)));
