@@ -49,6 +49,7 @@ public sealed class ReportBuilder
         var payload = new
         {
             generated = nowTs,
+            version = AppVersion.Current,
             tz_offset_minutes = (int)TimeZoneInfo.Local.GetUtcOffset(DateTimeOffset.FromUnixTimeSeconds(nowTs)).TotalMinutes,
             // The language the report OPENS in. The switcher in the page overrides it and
             // remembers the choice; this is only the default, and it is the same default the

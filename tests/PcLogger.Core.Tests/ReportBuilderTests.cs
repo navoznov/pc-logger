@@ -139,7 +139,7 @@ public class BuildJsonTests : IDisposable
     {
         var root = Build(86_400);
 
-        foreach (var key in new[] { "generated", "tz_offset_minutes", "lang", "defaults", "spans", "app_spans", "game_spans", "intensity", "events" })
+        foreach (var key in new[] { "generated", "version", "tz_offset_minutes", "lang", "defaults", "spans", "app_spans", "game_spans", "intensity", "events" })
             Assert.True(root.TryGetProperty(key, out _), $"missing key: {key}");
     }
 
@@ -149,6 +149,12 @@ public class BuildJsonTests : IDisposable
         var lang = Build(86_400).GetProperty("lang").GetString();
 
         Assert.Contains(lang, Strings.All.Keys);
+    }
+
+    [Fact]
+    public void ThePayloadCarriesTheVersionThatProducedIt()
+    {
+        Assert.Equal(AppVersion.Current, Build(86_400).GetProperty("version").GetString());
     }
 
     // The browser reads this payload by field name and never validates it: a renamed field
